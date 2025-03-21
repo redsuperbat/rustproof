@@ -22,17 +22,17 @@ impl LanguageServer for Backend {
             server_info: None,
             offset_encoding: None,
             capabilities: ServerCapabilities {
-                inlay_hint_provider: Some(OneOf::Left(true)),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
-                        change: Some(TextDocumentSyncKind::FULL),
                         save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
                             include_text: Some(true),
                         })),
                         ..Default::default()
                     },
                 )),
+
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec!["dummy.do_something".to_string()],
                     work_done_progress_options: Default::default(),
@@ -71,13 +71,14 @@ impl LanguageServer for Backend {
         })
     }
     async fn initialized(&self, _: InitializedParams) {
-        debug!("initialized!");
+        info!("initialized!");
     }
 
     async fn shutdown(&self) -> Result<()> {
         Ok(())
     }
 
+    // TODO: Implement this
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         debug!("file opened");
         self.on_change(TextDocumentItem {
@@ -88,7 +89,9 @@ impl LanguageServer for Backend {
         .await
     }
 
+    // TODO: perhaps later
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        debug!("file changed");
         self.on_change(TextDocumentItem {
             text: &params.content_changes[0].text,
             uri: params.text_document.uri,
@@ -97,8 +100,9 @@ impl LanguageServer for Backend {
         .await
     }
 
+    // TODO: Implement this
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        dbg!(&params.text);
+        debug!("file saved");
         if let Some(text) = params.text {
             let item = TextDocumentItem {
                 uri: params.text_document.uri,
@@ -110,29 +114,20 @@ impl LanguageServer for Backend {
         }
         debug!("file saved!");
     }
-    async fn did_close(&self, _: DidCloseTextDocumentParams) {
-        debug!("file closed!");
-    }
 
-    async fn inlay_hint(
-        &self,
-        _params: tower_lsp::lsp_types::InlayHintParams,
-    ) -> Result<Option<Vec<InlayHint>>> {
-        debug!("inlay hint");
-
-        Ok(None)
-    }
-
-    async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        debug!("configuration changed!");
-    }
-
-    async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-        debug!("workspace folders changed!");
-    }
-
-    async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        debug!("watched files have changed!");
+    // TODO: Implement this
+    async fn code_action(&self, _params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        debug!("Code actions");
+        Ok(Some(vec![CodeActionOrCommand::CodeAction(CodeAction {
+            kind: Some(CodeActionKind::REFACTOR_INLINE),
+            title: String::from("Replace"),
+            command: Some(Command {
+                title: "Replace with <word here>".to_string(),
+                command: "replace.with.word".to_string(),
+                arguments: None,
+            }),
+            ..Default::default()
+        })]))
     }
 
     async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
@@ -159,6 +154,7 @@ impl Notification for CustomNotification {
     type Params = InlayHintParams;
     const METHOD: &'static str = "custom/notification";
 }
+#[derive(Debug)]
 struct TextDocumentItem<'a> {
     uri: Url,
     text: &'a str,
@@ -167,11 +163,13 @@ struct TextDocumentItem<'a> {
 
 impl Backend {
     async fn on_change<'a>(&self, params: TextDocumentItem<'a>) {
-        dbg!(&params.version);
+        info!("{:?}", params);
         let rope = ropey::Rope::from_str(params.text);
         self.document_map
             .insert(params.uri.to_string(), rope.clone());
-        let diagnostics = vec![];
+
+        let range = Range::new(Position::new(1, 1), Position::new(1, 3));
+        let diagnostics = vec![Diagnostic::new_simple(range, "Random message".to_string())];
 
         self.client
             .publish_diagnostics(params.uri.clone(), diagnostics, params.version)
