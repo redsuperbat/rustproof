@@ -1,4 +1,4 @@
-use hunspell_rs::{Dictionary, Hunspell};
+use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use log::{debug, info};
 use pipeline::Pipeline;
@@ -13,6 +13,13 @@ mod expander;
 mod keywords;
 mod lexer;
 mod pipeline;
+
+thread_local! {
+  static SPELL_CHECKERS: Vec<Hunspell> = vec![
+     Hunspell::new("./languages/en/en_US.aff", "./languages/en/en_US.dic"),
+     Hunspell::new("./languages/en/en_AU.aff", "./languages/en/en_AU.dic")
+   ]
+}
 
 struct Backend {
     client: Client,
@@ -60,21 +67,31 @@ impl LanguageServer for Backend {
         let src = params.text_document.text;
         let lexer = Lexer::new(src);
         let tokens = Pipeline::new(&language_id).run(lexer);
+
+        let misspelled_words = tokens
+            .iter()
+            .filter(|t| {
+                SPELL_CHECKERS.with(|checkers| {
+                    checkers
+                        .iter()
+                        .all(|c| c.check(&t.lexeme) == CheckResult::MissingInDictionary)
+                })
+            })
+            .map(|t| {
+                Diagnostic::new_simple(
+                    Range {
+                        start: Position::new(t.start.line() - 1, t.start.column() - 1),
+                        end: Position::new(t.end.line() - 1, t.end.column() - 1),
+                    },
+                    format!("Unknown word {}", t.lexeme),
+                )
+            })
+            .collect::<Vec<_>>();
+
         self.client
             .publish_diagnostics(
                 params.text_document.uri.clone(),
-                tokens
-                    .iter()
-                    .map(|t| {
-                        Diagnostic::new_simple(
-                            Range {
-                                start: Position::new(t.start.line() - 1, t.start.column() - 1),
-                                end: Position::new(t.end.line() - 1, t.end.column() - 1),
-                            },
-                            format!("Unknown word {}", t.lexeme),
-                        )
-                    })
-                    .collect(),
+                misspelled_words,
                 Some(params.text_document.version),
             )
             .await;
@@ -91,8 +108,21 @@ impl LanguageServer for Backend {
     }
 
     // TODO: Implement this
-    async fn code_action(&self, _params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        debug!("Code actions");
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        if params.context.diagnostics.is_empty() {
+            return Ok(None);
+        }
+
+        debug!(
+            "{}",
+            params
+                .context
+                .diagnostics
+                .iter()
+                .map(|d| d.message.clone())
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
         Ok(Some(vec![CodeActionOrCommand::CodeAction(CodeAction {
             kind: Some(CodeActionKind::REFACTOR_INLINE),
             title: String::from("Replace"),
@@ -140,4 +170,16 @@ async fn main() {
 
     info!("Started language server");
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+#[cfg(test)]
+mod test {
+    use hunspell_rs::{CheckResult, Hunspell};
+
+    #[test]
+    fn hunspell_works() {
+        let spell = Hunspell::new("./languages/en/en_US.aff", "./languages/en/en_US.dic");
+        let result = spell.check("hi");
+        assert_eq!(result, CheckResult::FoundInDictionary);
+    }
 }
