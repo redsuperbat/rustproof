@@ -1,9 +1,13 @@
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use log::{debug, info};
 use pipeline::Pipeline;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::sync::{Mutex, MutexGuard};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::*;
@@ -21,8 +25,25 @@ thread_local! {
    ]
 }
 
+struct SafeLocalDictionary(Arc<Mutex<HashSet<String>>>);
+
+impl SafeLocalDictionary {
+    fn new() -> Self {
+        Self(Arc::new(Mutex::new(HashSet::new())))
+    }
+
+    async fn take(&self) -> MutexGuard<'_, HashSet<String>> {
+        self.0.lock().await
+    }
+
+    async fn add(&mut self, word: &str) {
+        self.0.lock().await.insert(word.to_string());
+    }
+}
+
 struct Backend {
     client: Client,
+    local_dict: SafeLocalDictionary,
 }
 
 #[tower_lsp::async_trait]
@@ -68,6 +89,8 @@ impl LanguageServer for Backend {
         let lexer = Lexer::new(src);
         let tokens = Pipeline::new(&language_id).run(lexer);
 
+        let local_set = self.local_dict.take().await;
+
         let misspelled_words = tokens
             .iter()
             .filter(|t| {
@@ -77,13 +100,19 @@ impl LanguageServer for Backend {
                         .all(|c| c.check(&t.lexeme) == CheckResult::MissingInDictionary)
                 })
             })
+            .filter(|t| !local_set.contains(&t.lexeme))
             .map(|t| {
-                Diagnostic::new_simple(
+                Diagnostic::new(
                     Range {
-                        start: Position::new(t.start.line() - 1, t.start.column() - 1),
-                        end: Position::new(t.end.line() - 1, t.end.column() - 1),
+                        start: Position::new(t.start.line(), t.start.column() - 1),
+                        end: Position::new(t.end.line(), t.end.column() - 1),
                     },
+                    Some(DiagnosticSeverity::INFORMATION),
+                    Some(NumberOrString::String(t.lexeme.to_string())),
+                    None,
                     format!("Unknown word {}", t.lexeme),
+                    None,
+                    None,
                 )
             })
             .collect::<Vec<_>>();
@@ -112,27 +141,42 @@ impl LanguageServer for Backend {
         if params.context.diagnostics.is_empty() {
             return Ok(None);
         }
+        let word = match params.context.diagnostics.first() {
+            Some(t) => match &t.code {
+                Some(t) => match t {
+                    NumberOrString::String(s) => s,
+                    NumberOrString::Number(_) => return Ok(None),
+                },
+                None => return Ok(None),
+            },
+            None => return Ok(None),
+        };
 
-        debug!(
-            "{}",
-            params
-                .context
-                .diagnostics
-                .iter()
-                .map(|d| d.message.clone())
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-        Ok(Some(vec![CodeActionOrCommand::CodeAction(CodeAction {
-            kind: Some(CodeActionKind::REFACTOR_INLINE),
-            title: String::from("Replace"),
-            command: Some(Command {
-                title: "Replace with <word here>".to_string(),
-                command: "replace.with.word".to_string(),
-                arguments: None,
-            }),
-            ..Default::default()
-        })]))
+        let suggestions = SPELL_CHECKERS
+            .with(|checkers| {
+                checkers
+                    .iter()
+                    .flat_map(|c| c.suggest(&word))
+                    .collect::<Vec<_>>()
+            })
+            .iter()
+            .collect::<HashSet<_>>()
+            .iter()
+            .map(|w| {
+                let title = format!("Replace with \"{}\"", w);
+                CodeActionOrCommand::CodeAction(CodeAction {
+                    kind: Some(CodeActionKind::REFACTOR_INLINE),
+                    title: title.to_string(),
+                    command: Some(Command {
+                        title,
+                        command: "replace.with.word".to_string(),
+                        arguments: None,
+                    }),
+                    ..Default::default()
+                })
+            })
+            .collect::<Vec<_>>();
+        Ok(Some(suggestions))
     }
 
     async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
@@ -166,7 +210,10 @@ async fn main() {
 
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
 
-    let (service, socket) = LspService::new(|client| Backend { client });
+    let (service, socket) = LspService::new(|client| Backend {
+        client,
+        local_dict: SafeLocalDictionary::new(),
+    });
 
     info!("Started language server");
     Server::new(stdin, stdout, socket).serve(service).await;

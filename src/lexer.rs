@@ -94,8 +94,8 @@ impl Lexer {
     pub fn new<T: AsRef<str>>(text: T) -> Lexer {
         return Lexer {
             text: text.as_ref().to_string(),
-            col: 1,
-            line: 1,
+            col: 0,
+            line: 0,
             offset: 0,
         };
     }
