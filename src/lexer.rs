@@ -10,6 +10,10 @@ impl Pos {
         return self.0;
     }
 
+    pub fn increment_col(&self, col: u32) -> Pos {
+        return Pos(self.line(), self.column() + col);
+    }
+
     pub fn column(&self) -> u32 {
         return self.1;
     }

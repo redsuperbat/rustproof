@@ -35,10 +35,6 @@ impl SafeLocalDictionary {
     async fn take(&self) -> MutexGuard<'_, HashSet<String>> {
         self.0.lock().await
     }
-
-    async fn add(&mut self, word: &str) {
-        self.0.lock().await.insert(word.to_string());
-    }
 }
 
 struct Backend {
@@ -64,7 +60,7 @@ impl LanguageServer for Backend {
                     },
                 )),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["replace.with.word".to_string()],
+                    commands: vec!["replace.with.word".to_string(), "add.to.dict".to_string()],
                     work_done_progress_options: Default::default(),
                 }),
                 ..ServerCapabilities::default()
@@ -141,7 +137,16 @@ impl LanguageServer for Backend {
         if params.context.diagnostics.is_empty() {
             return Ok(None);
         }
-        let word = match params.context.diagnostics.first() {
+        let cursor_line = params.range.start.line;
+        let cursor_col = params.range.start.character;
+
+        let diagnostic_under_cursor = params.context.diagnostics.iter().find(|d| {
+            d.range.start.line == cursor_line
+                && d.range.start.character <= cursor_col
+                && cursor_col < d.range.end.character
+        });
+
+        let word = match diagnostic_under_cursor {
             Some(t) => match &t.code {
                 Some(t) => match t {
                     NumberOrString::String(s) => s,
@@ -152,11 +157,15 @@ impl LanguageServer for Backend {
             None => return Ok(None),
         };
 
-        let suggestions = SPELL_CHECKERS
+        let mut suggestions = SPELL_CHECKERS
             .with(|checkers| {
                 checkers
                     .iter()
                     .flat_map(|c| c.suggest(&word))
+                    // Suggestions shorter than 2 characters are usually bad
+                    .filter(|s| s.len() > 2)
+                    // Take first four suggestions
+                    .take(4)
                     .collect::<Vec<_>>()
             })
             .iter()
@@ -165,30 +174,48 @@ impl LanguageServer for Backend {
             .map(|w| {
                 let title = format!("Replace with \"{}\"", w);
                 CodeActionOrCommand::CodeAction(CodeAction {
-                    kind: Some(CodeActionKind::REFACTOR_INLINE),
                     title: title.to_string(),
                     command: Some(Command {
                         title,
                         command: "replace.with.word".to_string(),
-                        arguments: None,
+                        arguments: Some(vec![Value::String(w.to_string())]),
                     }),
                     ..Default::default()
                 })
             })
             .collect::<Vec<_>>();
+
+        let title = format!("Add \"{word}\" to dictionary");
+        suggestions.push(CodeActionOrCommand::CodeAction(CodeAction {
+            title: title.to_string(),
+            command: Some(Command {
+                title,
+                command: "add.to.dict".to_string(),
+                arguments: Some(vec![Value::String(word.to_string())]),
+            }),
+            ..Default::default()
+        }));
+
         Ok(Some(suggestions))
     }
 
-    async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
+    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         debug!("command executed!");
-
-        match self.client.apply_edit(WorkspaceEdit::default()).await {
-            Ok(res) if res.applied => self.client.log_message(MessageType::INFO, "applied").await,
-            Ok(_) => self.client.log_message(MessageType::INFO, "rejected").await,
-            Err(err) => self.client.log_message(MessageType::ERROR, err).await,
-        }
-
-        Ok(None)
+        let mut dict = self.local_dict.take().await;
+        match params.command.as_str() {
+            "add.to.dict" => match params.arguments.first() {
+                Some(a) => match a {
+                    Value::String(s) => {
+                        dict.insert(s.to_string());
+                        return Ok(None);
+                    }
+                    _ => return Ok(None),
+                },
+                None => return Ok(None),
+            },
+            "replace.with.word" => return Ok(None),
+            _ => return Ok(None),
+        };
     }
 }
 
