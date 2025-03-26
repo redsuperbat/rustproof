@@ -4,7 +4,7 @@ use lexer::Lexer;
 use log::{debug, info};
 use pipeline::Pipeline;
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -63,36 +63,12 @@ impl Backend {
             .collect::<Vec<_>>()
     }
 
-    async fn replace_with_word(&self, mut params: ExecuteCommandParams) {
+    async fn replace_with_word(&self, params: ExecuteCommandParams) {
         debug!("Replacing word");
-        let Some(range) = params.arguments.pop() else {
+        let [Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
-        let range = serde_json::from_value::<Range>(range).unwrap();
-        let [Value::String(word), Value::String(uri)] = &params.arguments.as_slice() else {
-            return;
-        };
-        debug!("{:?}", range);
         let Ok(uri) = Url::from_str(uri) else { return };
-        let result = self
-            .client
-            .apply_edit(WorkspaceEdit {
-                changes: None,
-                document_changes: Some(DocumentChanges::Edits(vec![TextDocumentEdit {
-                    text_document: OptionalVersionedTextDocumentIdentifier {
-                        uri: uri.clone(),
-                        version: None,
-                    },
-                    edits: vec![OneOf::Left(TextEdit {
-                        range,
-                        new_text: word.to_string(),
-                    })],
-                }])),
-                change_annotations: None,
-            })
-            .await;
-        debug!("{:?}", result);
-
         self.spell_check_uri(uri).await;
     }
 
@@ -141,7 +117,7 @@ impl LanguageServer for Backend {
                     commands: vec!["replace.with.word".to_string(), "add.to.dict".to_string()],
                     work_done_progress_options: Default::default(),
                 }),
-                ..ServerCapabilities::default()
+                ..Default::default()
             },
         })
     }
@@ -208,7 +184,6 @@ impl LanguageServer for Backend {
         let Some(NumberOrString::String(word)) = diagnostic_under_cursor.code.as_ref() else {
             return Ok(None);
         };
-        let range_value = serde_json::to_value(diagnostic_under_cursor.range).unwrap();
 
         let mut suggestions = SPELL_CHECKERS
             .with(|checkers| {
@@ -227,16 +202,24 @@ impl LanguageServer for Backend {
             .iter()
             .map(|w| {
                 let title = format!("Replace with \"{}\"", w);
+                let mut changes = HashMap::new();
+                changes.insert(
+                    uri.clone(),
+                    vec![TextEdit {
+                        range: diagnostic_under_cursor.range,
+                        new_text: w.to_string(),
+                    }],
+                );
                 CodeActionOrCommand::CodeAction(CodeAction {
                     title: title.to_string(),
                     command: Some(Command {
                         title,
                         command: "replace.with.word".to_string(),
-                        arguments: Some(vec![
-                            Value::String(word.to_string()),
-                            Value::String(uri.to_string()),
-                            range_value.clone(),
-                        ]),
+                        arguments: Some(vec![Value::String(uri.to_string())]),
+                    }),
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(changes),
+                        ..Default::default()
                     }),
                     ..Default::default()
                 })
