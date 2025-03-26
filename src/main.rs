@@ -11,6 +11,8 @@ use std::fmt::Display;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::str::FromStr;
+use std::sync::mpsc;
+use std::thread;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -22,13 +24,6 @@ mod lexer;
 mod local_dictionary;
 mod pipeline;
 
-thread_local! {
-  static SPELL_CHECKERS: Vec<Hunspell> = vec![
-     Hunspell::new("./languages/en/en_US.aff", "./languages/en/en_US.dic"),
-     Hunspell::new("./languages/en/en_AU.aff", "./languages/en/en_AU.dic")
-   ]
-}
-
 type LanguageId = String;
 type SourceCode = String;
 
@@ -37,6 +32,8 @@ struct Backend {
     config: RwLock<Config>,
     local_dict: LocalDictionary,
     sources: DashMap<String, (LanguageId, SourceCode)>,
+    checker: RwLock<Option<mpsc::Sender<(String, oneshot::Sender<bool>)>>>,
+    suggester: RwLock<Option<mpsc::Sender<(String, oneshot::Sender<Vec<String>>)>>>,
 }
 
 impl Backend {
@@ -46,13 +43,7 @@ impl Backend {
 
         tokens
             .iter()
-            .filter(|t| {
-                SPELL_CHECKERS.with(|checkers| {
-                    checkers
-                        .iter()
-                        .all(|c| c.check(&t.lexeme) == CheckResult::MissingInDictionary)
-                })
-            })
+            .filter(|t| self.spell_check(&t.lexeme))
             .filter(|t| !self.local_dict.contains(&t.lexeme))
             .map(|t| {
                 Diagnostic::new(
@@ -151,6 +142,70 @@ impl Backend {
     async fn log_info<T: Display>(&self, v: T) {
         self.client.log_message(MessageType::INFO, v).await
     }
+
+    fn start_spellchecker(&self) {
+        let (suggester, suggester_tx) = mpsc::channel::<(String, oneshot::Sender<Vec<String>>)>();
+        *self.suggester.write() = Some(suggester);
+
+        thread::spawn(move || {
+            let checkers = vec![Hunspell::new(
+                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.aff",
+                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.dic",
+            )];
+
+            while let Ok((word, send)) = suggester_tx.recv() {
+                let suggestions = checkers
+                    .iter()
+                    .flat_map(|c| c.suggest(&word))
+                    // Suggestions shorter than 2 characters are usually bad
+                    .filter(|s| s.len() > 2)
+                    // remove duplicates
+                    .collect::<HashSet<_>>()
+                    .iter()
+                    // Take first four suggestions to not overload client
+                    .take(4)
+                    .map(|s| s.to_owned())
+                    .collect::<Vec<_>>();
+
+                let _ = send.send(suggestions);
+            }
+        });
+        let (checker, checker_tx) = mpsc::channel::<(String, oneshot::Sender<bool>)>();
+        *self.checker.write() = Some(checker);
+
+        thread::spawn(move || {
+            let spell_checkers = vec![Hunspell::new(
+                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.aff",
+                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.dic",
+            )];
+            while let Ok((word, send)) = checker_tx.recv() {
+                let result = &spell_checkers
+                    .iter()
+                    .any(|c| c.check(&word) == CheckResult::MissingInDictionary);
+                let _ = send.send(*result);
+            }
+        });
+    }
+
+    fn spell_check(&self, word: &str) -> bool {
+        let (rx, tx) = oneshot::channel();
+        let checker = self.checker.read();
+        let _ = checker.as_ref().unwrap().send((word.to_string(), rx));
+        match tx.recv() {
+            Ok(ok) => ok,
+            Err(_) => false,
+        }
+    }
+
+    fn suggest(&self, word: &str) -> Vec<String> {
+        let (rx, tx) = oneshot::channel();
+        let suggester = self.suggester.read();
+        let _ = suggester.as_ref().unwrap().send((word.to_string(), rx));
+        match tx.recv() {
+            Ok(ok) => ok,
+            Err(_) => vec![],
+        }
+    }
 }
 
 #[tower_lsp::async_trait]
@@ -158,6 +213,7 @@ impl LanguageServer for Backend {
     async fn initialize(&self, init: InitializeParams) -> Result<InitializeResult> {
         self.load_config(init).await;
         self.load_local_dict_from_file();
+        self.start_spellchecker();
 
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
@@ -249,20 +305,8 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let mut suggestions = SPELL_CHECKERS
-            .with(|checkers| {
-                checkers
-                    .iter()
-                    .flat_map(|c| c.suggest(&word))
-                    // Suggestions shorter than 2 characters are usually bad
-                    .filter(|s| s.len() > 2)
-                    // Take first four suggestions
-                    .take(4)
-                    .collect::<Vec<_>>()
-            })
-            .iter()
-            // remove duplicates
-            .collect::<HashSet<_>>()
+        let mut suggestions = self
+            .suggest(word)
             .iter()
             .map(|w| {
                 let title = format!("Replace with \"{}\"", w);
@@ -328,6 +372,8 @@ async fn main() {
         local_dict: LocalDictionary::new(),
         config: RwLock::new(Config::default()),
         sources: DashMap::new(),
+        checker: RwLock::new(None),
+        suggester: RwLock::new(None),
     });
 
     Server::new(stdin, stdout, socket).serve(service).await;
