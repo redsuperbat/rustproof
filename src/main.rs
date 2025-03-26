@@ -1,13 +1,13 @@
-use config::Config;
+use config::{expand_tilde, Config};
 use dashmap::DashMap;
 use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use local_dictionary::LocalDictionary;
-use log::{debug, info};
 use parking_lot::RwLock;
 use pipeline::Pipeline;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::str::FromStr;
@@ -53,7 +53,7 @@ impl Backend {
                         .all(|c| c.check(&t.lexeme) == CheckResult::MissingInDictionary)
                 })
             })
-            .filter(|t| !self.local_dict.contains(&t.lexeme.to_lowercase()))
+            .filter(|t| !self.local_dict.contains(&t.lexeme))
             .map(|t| {
                 Diagnostic::new(
                     Range {
@@ -72,7 +72,7 @@ impl Backend {
     }
 
     async fn replace_with_word(&self, params: ExecuteCommandParams) {
-        debug!("Replacing word");
+        self.log_info("Replacing word").await;
         let [Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
@@ -81,7 +81,7 @@ impl Backend {
     }
 
     async fn add_to_dict(&self, params: ExecuteCommandParams) {
-        debug!("Adding word to local dictionary");
+        self.log_info("Adding word to local dictionary").await;
         let [Value::String(word), Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
@@ -128,15 +128,35 @@ impl Backend {
 
         writeln!(file, "{word}").expect("Unable to append to local dictionary");
     }
+
+    async fn load_config(&self, init: InitializeParams) {
+        let Some(options) = init.initialization_options else {
+            return;
+        };
+        let mut options: Config = match serde_json::from_value(options) {
+            Ok(o) => o,
+            Err(e) => {
+                self.log_error(e).await;
+                return;
+            }
+        };
+        options.dict_path = expand_tilde(options.dict_path).expect("Invalid dict path");
+        let mut config = self.config.write();
+        *config = options
+    }
+
+    async fn log_error<T: Display>(&self, v: T) {
+        self.client.log_message(MessageType::ERROR, v).await
+    }
+    async fn log_info<T: Display>(&self, v: T) {
+        self.client.log_message(MessageType::INFO, v).await
+    }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, init: InitializeParams) -> Result<InitializeResult> {
-        if let Some(options) = init.initialization_options {
-            let mut config = self.config.write();
-            *config = serde_json::from_value(options).expect("Invalid config format");
-        };
+        self.load_config(init).await;
         self.load_local_dict_from_file();
 
         Ok(InitializeResult {
@@ -166,16 +186,16 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        debug!("initialized!");
+        self.log_info("initialized").await;
     }
 
     async fn shutdown(&self) -> Result<()> {
-        debug!("shutdown!");
+        self.log_info("shutdown").await;
         Ok(())
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        debug!("opened file");
+        self.log_info("opened file").await;
         let misspelled_words = self
             .spell_check_code(
                 &params.text_document.text,
@@ -310,7 +330,6 @@ async fn main() {
         sources: DashMap::new(),
     });
 
-    info!("Started language server");
     Server::new(stdin, stdout, socket).serve(service).await;
 }
 
