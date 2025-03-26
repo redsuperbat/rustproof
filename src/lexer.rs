@@ -151,7 +151,7 @@ impl Lexer {
             };
 
             match char {
-                'a'..='z' | 'A'..='Z' => {
+                'a'..='z' | 'A'..='Z' | '\'' => {
                     lexeme += &self.next()?.to_string();
                 }
                 _ => break,

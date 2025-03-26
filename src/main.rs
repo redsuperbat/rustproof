@@ -1,18 +1,25 @@
-use dashmap::{DashMap, DashSet};
+use config::Config;
+use dashmap::DashMap;
 use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
+use local_dictionary::LocalDictionary;
 use log::{debug, info};
+use parking_lot::RwLock;
 use pipeline::Pipeline;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::str::FromStr;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+mod config;
 mod expander;
 mod keywords;
 mod lexer;
+mod local_dictionary;
 mod pipeline;
 
 thread_local! {
@@ -27,7 +34,8 @@ type SourceCode = String;
 
 struct Backend {
     client: Client,
-    local_dict: DashSet<String>,
+    config: RwLock<Config>,
+    local_dict: LocalDictionary,
     sources: DashMap<String, (LanguageId, SourceCode)>,
 }
 
@@ -77,7 +85,7 @@ impl Backend {
         let [Value::String(word), Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
-        self.local_dict.insert(word.to_string().to_lowercase());
+        self.insert_into_local_dict(word);
         let Ok(uri) = Url::from_str(uri) else { return };
         self.spell_check_uri(uri).await;
     }
@@ -91,11 +99,46 @@ impl Backend {
             .publish_diagnostics(uri.clone(), misspelled_words, None)
             .await;
     }
+
+    fn load_local_dict_from_file(&self) {
+        let config = &self.config.read();
+        if !config.dict_path.exists() {
+            return;
+        };
+        let file = fs::read_to_string(&config.dict_path).expect("Unable to read dict");
+        for w in file.split("\n") {
+            self.local_dict.insert(w.to_string());
+        }
+    }
+
+    fn insert_into_local_dict(&self, word: &str) {
+        self.local_dict.insert(word.to_string());
+        let path = &self.config.read().dict_path;
+        if !path.exists() {
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("Unable to create config dir");
+            }
+        };
+
+        let mut file = OpenOptions::new()
+            .append(true)
+            .create(true) // Create if it doesn't exist
+            .open(path)
+            .expect("Unable to open local dictionary");
+
+        writeln!(file, "{word}").expect("Unable to append to local dictionary");
+    }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, init: InitializeParams) -> Result<InitializeResult> {
+        if let Some(options) = init.initialization_options {
+            let mut config = self.config.write();
+            *config = serde_json::from_value(options).expect("Invalid config format");
+        };
+        self.load_local_dict_from_file();
+
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
                 name: "Rustproof".to_string(),
@@ -121,6 +164,7 @@ impl LanguageServer for Backend {
             },
         })
     }
+
     async fn initialized(&self, _: InitializedParams) {
         debug!("initialized!");
     }
@@ -261,7 +305,8 @@ async fn main() {
 
     let (service, socket) = LspService::new(|client| Backend {
         client,
-        local_dict: DashSet::new(),
+        local_dict: LocalDictionary::new(),
+        config: RwLock::new(Config::default()),
         sources: DashMap::new(),
     });
 
