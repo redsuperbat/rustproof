@@ -55,7 +55,7 @@ impl Location {
 
 #[derive(Debug)]
 pub struct Lexer {
-    text: String,
+    text: Vec<char>,
     col: u32,
     line: u32,
     offset: usize,
@@ -97,7 +97,7 @@ pub enum TokenKind {
 impl Lexer {
     pub fn new<T: AsRef<str>>(text: T) -> Lexer {
         return Lexer {
-            text: text.as_ref().to_string(),
+            text: text.as_ref().chars().collect(),
             col: 0,
             line: 0,
             offset: 0,
@@ -126,7 +126,7 @@ impl Lexer {
         self.col += 1;
 
         if char == '\n' {
-            self.col = 1;
+            self.col = 0;
             self.line += 1;
         }
         self.offset += 1;
@@ -135,7 +135,7 @@ impl Lexer {
     }
 
     fn peek(&self) -> Option<char> {
-        self.text.chars().nth(self.offset)
+        self.text.get(self.offset).map(|c| *c)
     }
 
     fn identifier(&mut self) -> Option<Token> {
