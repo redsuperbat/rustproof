@@ -65,14 +65,23 @@ impl Backend {
             .collect::<Vec<_>>()
     }
 
-    async fn spell_check_uri(&self, uri: Url) {
-        let source = match self.sources.get(&uri.to_string()) {
-            Some(v) => v,
-            None => return,
+    async fn replace_with_word(&self, params: ExecuteCommandParams) {}
+
+    async fn add_to_dict(&self, params: ExecuteCommandParams) {
+        debug!("Adding word to local dictionary");
+        let [Value::String(word), Value::String(uri)] = &params.arguments.as_slice() else {
+            return;
         };
-        debug!("{}:{}", source.0.len(), source.1.len());
+        self.local_dict.insert(word.to_string().to_lowercase());
+        let Ok(uri) = Url::from_str(uri) else { return };
+        self.spell_check_uri(uri).await;
+    }
+
+    async fn spell_check_uri(&self, uri: Url) {
+        let Some(source) = self.sources.get(&uri.to_string()) else {
+            return;
+        };
         let misspelled_words = self.spell_check_code(&source.1, &source.0).await;
-        debug!("{:?}", misspelled_words);
         self.client
             .publish_diagnostics(uri.clone(), misspelled_words, None)
             .await;
@@ -224,21 +233,11 @@ impl LanguageServer for Backend {
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        let dict = &self.local_dict;
-
         match params.command.as_str() {
-            "add.to.dict" => match params.arguments.as_slice() {
-                [Value::String(word), Value::String(uri)] => {
-                    debug!("Adding word to local dictionary");
-                    dict.insert(word.to_string().to_lowercase());
-                    let Ok(uri) = Url::from_str(uri) else {
-                        return Ok(None);
-                    };
-                    self.spell_check_uri(uri).await;
-                    return Ok(None);
-                }
-                _ => return Ok(None),
-            },
+            "add.to.dict" => {
+                self.add_to_dict(params).await;
+                return Ok(None);
+            }
             "replace.with.word" => {
                 debug!("Replacing with a new word");
 
