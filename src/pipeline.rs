@@ -18,6 +18,8 @@ impl Pipeline {
     pub fn run(&self, lexer: Lexer) -> Vec<Token> {
         lexer
             .into_iter()
+            // We ignore tokens with a lexeme of length 1 since it's not
+            // relevant for spelling mistakes
             .filter(|v| v.lexeme.len() > 1)
             .filter(|v| !keywords::from_lang(&self.lang).contains(v.lexeme.as_str()))
             .flat_map(|v| {

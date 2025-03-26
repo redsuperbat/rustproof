@@ -21,8 +21,6 @@ impl Expandable for Token {
     }
 }
 
-type ExandaleDrakion = String;
-
 fn split_on_uppercase(s: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current_word = String::new();

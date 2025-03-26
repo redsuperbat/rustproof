@@ -1,13 +1,12 @@
-use std::collections::HashSet;
-use std::sync::Arc;
-
+use dashmap::{DashMap, DashSet};
 use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use log::{debug, info};
 use pipeline::Pipeline;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::{Mutex, MutexGuard};
+use std::collections::HashSet;
+use std::str::FromStr;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::*;
@@ -25,28 +24,69 @@ thread_local! {
    ]
 }
 
-struct SafeLocalDictionary(Arc<Mutex<HashSet<String>>>);
-
-impl SafeLocalDictionary {
-    fn new() -> Self {
-        Self(Arc::new(Mutex::new(HashSet::new())))
-    }
-
-    async fn take(&self) -> MutexGuard<'_, HashSet<String>> {
-        self.0.lock().await
-    }
-}
+type LanguageId = String;
+type SourceCode = String;
 
 struct Backend {
     client: Client,
-    local_dict: SafeLocalDictionary,
+    local_dict: DashSet<String>,
+    sources: DashMap<String, (LanguageId, SourceCode)>,
+}
+
+impl Backend {
+    async fn spell_check_code(&self, code: &str, language_id: &str) -> Vec<Diagnostic> {
+        let lexer = Lexer::new(code);
+        let tokens = Pipeline::new(&language_id).run(lexer);
+
+        tokens
+            .iter()
+            .filter(|t| {
+                SPELL_CHECKERS.with(|checkers| {
+                    checkers
+                        .iter()
+                        .all(|c| c.check(&t.lexeme) == CheckResult::MissingInDictionary)
+                })
+            })
+            .filter(|t| !self.local_dict.contains(&t.lexeme.to_lowercase()))
+            .map(|t| {
+                Diagnostic::new(
+                    Range {
+                        start: Position::new(t.start.line(), t.start.column()),
+                        end: Position::new(t.end.line(), t.end.column()),
+                    },
+                    Some(DiagnosticSeverity::INFORMATION),
+                    Some(NumberOrString::String(t.lexeme.to_string())),
+                    None,
+                    format!("Unknown word {}", t.lexeme),
+                    None,
+                    None,
+                )
+            })
+            .collect::<Vec<_>>()
+    }
+
+    async fn spell_check_uri(&self, uri: Url) {
+        let source = match self.sources.get(&uri.to_string()) {
+            Some(v) => v,
+            None => return,
+        };
+        debug!("{}:{}", source.0.len(), source.1.len());
+        let misspelled_words = self.spell_check_code(&source.1, &source.0).await;
+        debug!("{:?}", misspelled_words);
+        self.client
+            .publish_diagnostics(uri.clone(), misspelled_words, None)
+            .await;
+    }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
-            server_info: None,
+            server_info: Some(ServerInfo {
+                name: "Rustproof".to_string(),
+                version: None,
+            }),
             offset_encoding: None,
             capabilities: ServerCapabilities {
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
@@ -76,43 +116,17 @@ impl LanguageServer for Backend {
         Ok(())
     }
 
-    // TODO: Implement this
-    // - Initialize a parser based on filetype
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let language_id = params.text_document.language_id;
-        debug!("file opened {language_id}");
-        let src = params.text_document.text;
-        let lexer = Lexer::new(src);
-        let tokens = Pipeline::new(&language_id).run(lexer);
-
-        let local_set = self.local_dict.take().await;
-
-        let misspelled_words = tokens
-            .iter()
-            .filter(|t| {
-                SPELL_CHECKERS.with(|checkers| {
-                    checkers
-                        .iter()
-                        .all(|c| c.check(&t.lexeme) == CheckResult::MissingInDictionary)
-                })
-            })
-            .filter(|t| !local_set.contains(&t.lexeme))
-            .map(|t| {
-                Diagnostic::new(
-                    Range {
-                        start: Position::new(t.start.line(), t.start.column() - 1),
-                        end: Position::new(t.end.line(), t.end.column() - 1),
-                    },
-                    Some(DiagnosticSeverity::INFORMATION),
-                    Some(NumberOrString::String(t.lexeme.to_string())),
-                    None,
-                    format!("Unknown word {}", t.lexeme),
-                    None,
-                    None,
-                )
-            })
-            .collect::<Vec<_>>();
-
+        let misspelled_words = self
+            .spell_check_code(
+                &params.text_document.text,
+                &params.text_document.language_id,
+            )
+            .await;
+        self.sources.insert(
+            params.text_document.uri.to_string(),
+            (params.text_document.language_id, params.text_document.text),
+        );
         self.client
             .publish_diagnostics(
                 params.text_document.uri.clone(),
@@ -122,18 +136,25 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    // TODO: perhaps later
-    async fn did_change(&self, _params: DidChangeTextDocumentParams) {
-        debug!("file changed");
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let Some(text) = params.text else {
+            return;
+        };
+        let language_id = match self.sources.get(&params.text_document.uri.to_string()) {
+            Some(v) => v.0.to_string(),
+            None => return,
+        };
+
+        let misspelled_words = self.spell_check_code(&text, &language_id).await;
+        self.sources
+            .insert(params.text_document.uri.to_string(), (language_id, text));
+        self.client
+            .publish_diagnostics(params.text_document.uri.clone(), misspelled_words, None)
+            .await;
     }
 
-    // TODO: Implement this
-    async fn did_save(&self, _params: DidSaveTextDocumentParams) {
-        debug!("file saved");
-    }
-
-    // TODO: Implement this
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let uri = params.text_document.uri;
         if params.context.diagnostics.is_empty() {
             return Ok(None);
         }
@@ -191,7 +212,10 @@ impl LanguageServer for Backend {
             command: Some(Command {
                 title,
                 command: "add.to.dict".to_string(),
-                arguments: Some(vec![Value::String(word.to_string())]),
+                arguments: Some(vec![
+                    Value::String(word.to_string()),
+                    Value::String(uri.to_string()),
+                ]),
             }),
             ..Default::default()
         }));
@@ -200,20 +224,26 @@ impl LanguageServer for Backend {
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        debug!("command executed!");
-        let mut dict = self.local_dict.take().await;
+        let dict = &self.local_dict;
+
         match params.command.as_str() {
-            "add.to.dict" => match params.arguments.first() {
-                Some(a) => match a {
-                    Value::String(s) => {
-                        dict.insert(s.to_string());
+            "add.to.dict" => match params.arguments.as_slice() {
+                [Value::String(word), Value::String(uri)] => {
+                    debug!("Adding word to local dictionary");
+                    dict.insert(word.to_string().to_lowercase());
+                    let Ok(uri) = Url::from_str(uri) else {
                         return Ok(None);
-                    }
-                    _ => return Ok(None),
-                },
-                None => return Ok(None),
+                    };
+                    self.spell_check_uri(uri).await;
+                    return Ok(None);
+                }
+                _ => return Ok(None),
             },
-            "replace.with.word" => return Ok(None),
+            "replace.with.word" => {
+                debug!("Replacing with a new word");
+
+                return Ok(None);
+            }
             _ => return Ok(None),
         };
     }
@@ -239,7 +269,8 @@ async fn main() {
 
     let (service, socket) = LspService::new(|client| Backend {
         client,
-        local_dict: SafeLocalDictionary::new(),
+        local_dict: DashSet::new(),
+        sources: DashMap::new(),
     });
 
     info!("Started language server");
