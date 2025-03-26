@@ -3,12 +3,10 @@ use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use log::{debug, info};
 use pipeline::Pipeline;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::str::FromStr;
 use tower_lsp::jsonrpc::Result;
-use tower_lsp::lsp_types::notification::Notification;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
@@ -51,8 +49,8 @@ impl Backend {
             .map(|t| {
                 Diagnostic::new(
                     Range {
-                        start: Position::new(t.start.line(), t.start.column()),
-                        end: Position::new(t.end.line(), t.end.column()),
+                        start: Position::new(t.start.line, t.start.col),
+                        end: Position::new(t.end.line, t.end.col),
                     },
                     Some(DiagnosticSeverity::INFORMATION),
                     Some(NumberOrString::String(t.lexeme.to_string())),
@@ -65,7 +63,38 @@ impl Backend {
             .collect::<Vec<_>>()
     }
 
-    async fn replace_with_word(&self, params: ExecuteCommandParams) {}
+    async fn replace_with_word(&self, mut params: ExecuteCommandParams) {
+        debug!("Replacing word");
+        let Some(range) = params.arguments.pop() else {
+            return;
+        };
+        let range = serde_json::from_value::<Range>(range).unwrap();
+        let [Value::String(word), Value::String(uri)] = &params.arguments.as_slice() else {
+            return;
+        };
+        debug!("{:?}", range);
+        let Ok(uri) = Url::from_str(uri) else { return };
+        let result = self
+            .client
+            .apply_edit(WorkspaceEdit {
+                changes: None,
+                document_changes: Some(DocumentChanges::Edits(vec![TextDocumentEdit {
+                    text_document: OptionalVersionedTextDocumentIdentifier {
+                        uri: uri.clone(),
+                        version: None,
+                    },
+                    edits: vec![OneOf::Left(TextEdit {
+                        range,
+                        new_text: word.to_string(),
+                    })],
+                }])),
+                change_annotations: None,
+            })
+            .await;
+        debug!("{:?}", result);
+
+        self.spell_check_uri(uri).await;
+    }
 
     async fn add_to_dict(&self, params: ExecuteCommandParams) {
         debug!("Adding word to local dictionary");
@@ -126,6 +155,7 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        debug!("opened file");
         let misspelled_words = self
             .spell_check_code(
                 &params.text_document.text,
@@ -164,28 +194,21 @@ impl LanguageServer for Backend {
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let uri = params.text_document.uri;
-        if params.context.diagnostics.is_empty() {
-            return Ok(None);
-        }
         let cursor_line = params.range.start.line;
         let cursor_col = params.range.start.character;
-
         let diagnostic_under_cursor = params.context.diagnostics.iter().find(|d| {
             d.range.start.line == cursor_line
                 && d.range.start.character <= cursor_col
                 && cursor_col < d.range.end.character
         });
-
-        let word = match diagnostic_under_cursor {
-            Some(t) => match &t.code {
-                Some(t) => match t {
-                    NumberOrString::String(s) => s,
-                    NumberOrString::Number(_) => return Ok(None),
-                },
-                None => return Ok(None),
-            },
-            None => return Ok(None),
+        let Some(diagnostic_under_cursor) = diagnostic_under_cursor else {
+            return Ok(None);
         };
+
+        let Some(NumberOrString::String(word)) = diagnostic_under_cursor.code.as_ref() else {
+            return Ok(None);
+        };
+        let range_value = serde_json::to_value(diagnostic_under_cursor.range).unwrap();
 
         let mut suggestions = SPELL_CHECKERS
             .with(|checkers| {
@@ -199,6 +222,7 @@ impl LanguageServer for Backend {
                     .collect::<Vec<_>>()
             })
             .iter()
+            // remove duplicates
             .collect::<HashSet<_>>()
             .iter()
             .map(|w| {
@@ -208,7 +232,11 @@ impl LanguageServer for Backend {
                     command: Some(Command {
                         title,
                         command: "replace.with.word".to_string(),
-                        arguments: Some(vec![Value::String(w.to_string())]),
+                        arguments: Some(vec![
+                            Value::String(word.to_string()),
+                            Value::String(uri.to_string()),
+                            range_value.clone(),
+                        ]),
                     }),
                     ..Default::default()
                 })
@@ -234,30 +262,12 @@ impl LanguageServer for Backend {
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         match params.command.as_str() {
-            "add.to.dict" => {
-                self.add_to_dict(params).await;
-                return Ok(None);
-            }
-            "replace.with.word" => {
-                debug!("Replacing with a new word");
-
-                return Ok(None);
-            }
-            _ => return Ok(None),
+            "add.to.dict" => self.add_to_dict(params).await,
+            "replace.with.word" => self.replace_with_word(params).await,
+            _ => {}
         };
+        return Ok(None);
     }
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct InlayHintParams {
-    path: String,
-}
-
-#[allow(unused)]
-enum CustomNotification {}
-impl Notification for CustomNotification {
-    type Params = InlayHintParams;
-    const METHOD: &'static str = "custom/notification";
 }
 
 #[tokio::main]

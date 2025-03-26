@@ -1,21 +1,21 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Pos(pub u32, pub u32);
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct Pos {
+    pub line: u32,
+    pub col: u32,
+}
 
 impl Pos {
     pub fn start() -> Pos {
-        Pos(0, 0)
+        Pos { line: 0, col: 0 }
     }
 
-    pub fn line(&self) -> u32 {
-        return self.0;
-    }
-
-    pub fn increment_col(&self, col: u32) -> Pos {
-        return Pos(self.line(), self.column() + col);
-    }
-
-    pub fn column(&self) -> u32 {
-        return self.1;
+    pub fn set_col(&self, col: u32) -> Pos {
+        Pos {
+            line: self.line,
+            col,
+        }
     }
 }
 
@@ -25,7 +25,7 @@ impl Into<Pos> for &Pos {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Location {
     pub start: Pos,
     pub end: Pos,
@@ -105,7 +105,10 @@ impl Lexer {
     }
 
     fn pos(&self) -> Pos {
-        Pos(self.line, self.col)
+        Pos {
+            line: self.line,
+            col: self.col,
+        }
     }
 
     fn next_token(&mut self) -> Option<Token> {

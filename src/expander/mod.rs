@@ -1,7 +1,7 @@
 use camel::{expand_camel, is_camel};
 use pascal::{expand_pascal, is_pascal};
 
-use crate::lexer::Token;
+use crate::lexer::{Token, TokenKind};
 pub mod camel;
 pub mod pascal;
 
@@ -38,4 +38,23 @@ fn split_on_uppercase(s: &str) -> Vec<String> {
     }
 
     words
+}
+
+fn expand_uppercase(token: &Token) -> Vec<Token> {
+    let mut start = token.start.col;
+    split_on_uppercase(&token.lexeme)
+        .iter()
+        .map(|v| {
+            let lexeme = v.to_string();
+            let lexeme_len = lexeme.len() as u32;
+            let token = Token {
+                kind: TokenKind::Identifier,
+                start: token.start.set_col(start),
+                end: token.end.set_col(start + lexeme_len),
+                lexeme,
+            };
+            start += lexeme_len;
+            token
+        })
+        .collect()
 }

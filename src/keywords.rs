@@ -120,6 +120,7 @@ static JS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     set.extend(keywords);
     set
 });
+
 static RUBY: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     let keywords = [
         "BEGIN", "END", "alias", "and", "begin", "break", "case", "class", "def", "module", "next",
