@@ -1,38 +1,39 @@
 # Rustproof
 
-A fast extensible code checker written in rust.
+A fast, extensible code checker written in Rust.
 
-Rustproof uses the language server protocol to communicate with your editor and inform you about spelling mistakes in your code.
+Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code.
 
-It handles camel and pascal case by breaking up the words. Supports a multitude of languages and programming languages.
+It handles a multitude of casings by breaking words into individual components. It supports multiple natural and programming languages.
 
-Rustproof is built on top of Hunspell which is the spellchecker which powers libre office.
+Rustproof is built on top of Hunspell, the spellchecker that powers LibreOffice.
 
-Rustproof is primarily built for neovim but can be used in any editor which supports the language server protocol.
+While Rustproof is primarily built for Neovim, it can be used in any editor that supports the Language Server Protocol.
 
-## How it works
+## How It Works
 
-The concept is simple, split camelCase and snake_case words before checking them against a list of known words.
+The concept is simple: split camelCase, PascalCase, and snake_case words before checking them against a list of known words.
 
-- camelCase -> camel case
-- PascalCase -> pascal case
-- snake_case_words -> snake case words
-- kebab-case-words -> snake case words
+- **camelCase** → camel case
+- **PascalCase** → pascal case
+- **snake_case_words** → snake case words
+- **kebab-case-words** → kebab case words
 
-## Things to note
+## Things to Note
 
-- The local spellchecker is case insensitive. It will not catch errors like english which should be English.
-- The spellchecker uses dictionaries stored locally. It does not send anything outside your machine.
-- The words in the dictionaries can and do contain errors.
-- There are missing words.
-- Only words longer than 3 characters are checked. "jsj" is ok, while "jsja" is not.
-- All symbols and punctuation are ignored.
+- The local spellchecker is **case-insensitive**. It will not catch errors like "english," which should be "English."
+- The spellchecker uses **dictionaries stored locally** and does **not** send data outside your machine.
+- **Dictionaries may contain errors** and missing words.
+- Only words longer than **three characters** are checked. For example, "jsj" is ignored, while "jsja" is checked.
+- **Symbols and punctuation are ignored.**
 
-## LSP Configuration 
+## Adding Dictionaries
 
-### Neovim
+Since Rustproof is based on Hunspell, you can add many additional dictionaries. See [this repository](https://github.com/wooorm/dictionaries/tree/main/dictionaries) for more options.
 
-**/lsp/rustproof.lua**
+## LSP Configuration
+
+### Neovim (/lsp/rustproof.lua)
 
 ```lua
 return {
