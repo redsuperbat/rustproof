@@ -4,7 +4,6 @@ use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use local_dictionary::LocalDictionary;
 use parking_lot::RwLock;
-use pipeline::Pipeline;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -38,7 +37,7 @@ impl Backend {
     async fn spell_check_code(&self, code: &str) -> Vec<Diagnostic> {
         let severity = { self.config.read().diagnostic_severity.clone() };
         let lexer = Lexer::new(code);
-        let tokens = Pipeline::new().run(lexer);
+        let tokens = pipeline::run(lexer);
 
         tokens
             .iter()
