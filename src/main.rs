@@ -19,27 +19,25 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 mod config;
 mod expander;
-mod keywords;
 mod lexer;
 mod local_dictionary;
 mod pipeline;
 
-type LanguageId = String;
 type SourceCode = String;
 
 struct Backend {
     client: Client,
     config: RwLock<Config>,
     local_dict: LocalDictionary,
-    sources: DashMap<String, (LanguageId, SourceCode)>,
+    sources: DashMap<String, SourceCode>,
     checker: RwLock<Option<mpsc::Sender<(String, oneshot::Sender<bool>)>>>,
     suggester: RwLock<Option<mpsc::Sender<(String, oneshot::Sender<Vec<String>>)>>>,
 }
 
 impl Backend {
-    async fn spell_check_code(&self, code: &str, language_id: &str) -> Vec<Diagnostic> {
+    async fn spell_check_code(&self, code: &str) -> Vec<Diagnostic> {
         let lexer = Lexer::new(code);
-        let tokens = Pipeline::new(&language_id).run(lexer);
+        let tokens = Pipeline::new().run(lexer);
 
         tokens
             .iter()
@@ -85,7 +83,7 @@ impl Backend {
         let Some(source) = self.sources.get(&uri.to_string()) else {
             return;
         };
-        let misspelled_words = self.spell_check_code(&source.1, &source.0).await;
+        let misspelled_words = self.spell_check_code(&source).await;
         self.client
             .publish_diagnostics(uri.clone(), misspelled_words, None)
             .await;
@@ -256,15 +254,10 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         self.log_info("opened file").await;
-        let misspelled_words = self
-            .spell_check_code(
-                &params.text_document.text,
-                &params.text_document.language_id,
-            )
-            .await;
+        let misspelled_words = self.spell_check_code(&params.text_document.text).await;
         self.sources.insert(
             params.text_document.uri.to_string(),
-            (params.text_document.language_id, params.text_document.text),
+            params.text_document.text,
         );
         self.client
             .publish_diagnostics(
@@ -279,14 +272,10 @@ impl LanguageServer for Backend {
         let Some(text) = params.text else {
             return;
         };
-        let language_id = match self.sources.get(&params.text_document.uri.to_string()) {
-            Some(v) => v.0.to_string(),
-            None => return,
-        };
 
-        let misspelled_words = self.spell_check_code(&text, &language_id).await;
+        let misspelled_words = self.spell_check_code(&text).await;
         self.sources
-            .insert(params.text_document.uri.to_string(), (language_id, text));
+            .insert(params.text_document.uri.to_string(), text);
         self.client
             .publish_diagnostics(params.text_document.uri.clone(), misspelled_words, None)
             .await;
