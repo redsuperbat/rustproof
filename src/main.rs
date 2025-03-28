@@ -3,6 +3,7 @@ use dashmap::DashMap;
 use hunspell_rs::{CheckResult, Hunspell};
 use lexer::Lexer;
 use local_dictionary::LocalDictionary;
+use log::info;
 use parking_lot::RwLock;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -58,7 +59,7 @@ impl Backend {
     }
 
     async fn replace_with_word(&self, params: ExecuteCommandParams) {
-        self.log_info("Replacing word").await;
+        info!("Replacing word");
         let [Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
@@ -67,7 +68,7 @@ impl Backend {
     }
 
     async fn add_to_dict(&self, params: ExecuteCommandParams) {
-        self.log_info("Adding word to local dictionary").await;
+        info!("Adding word to local dictionary");
         let [Value::String(word), Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
@@ -127,15 +128,11 @@ impl Backend {
             }
         };
         options.dict_path = expand_tilde(options.dict_path).expect("Invalid dict path");
-        let mut config = self.config.write();
-        *config = options
+        *self.config.write() = options;
     }
 
     async fn log_error<T: Display>(&self, v: T) {
         self.client.log_message(MessageType::ERROR, v).await
-    }
-    async fn log_info<T: Display>(&self, v: T) {
-        self.client.log_message(MessageType::INFO, v).await
     }
 
     async fn start_spellchecker(&self) {
@@ -241,16 +238,16 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
-        self.log_info("initialized").await;
+        info!("initialized");
     }
 
     async fn shutdown(&self) -> Result<()> {
-        self.log_info("shutdown").await;
+        info!("shutdown");
         Ok(())
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.log_info("opened file").await;
+        info!("opened file");
         let misspelled_words = self.spell_check_code(&params.text_document.text).await;
         self.sources.insert(
             params.text_document.uri.to_string(),
