@@ -2,7 +2,7 @@ use dashmap::DashSet;
 
 pub struct LocalDictionary(DashSet<String>);
 
-// Local dictionary abstraction lowercases all spell checks
+// Local dictionary abstraction turns all words lowercase
 impl LocalDictionary {
     pub fn new() -> Self {
         Self(DashSet::new())

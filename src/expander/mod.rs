@@ -1,7 +1,7 @@
+use crate::lexer::{Token, TokenKind};
 use camel::{expand_camel, is_camel};
 use pascal::{expand_pascal, is_pascal};
 
-use crate::lexer::{Token, TokenKind};
 pub mod camel;
 pub mod pascal;
 

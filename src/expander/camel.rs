@@ -22,7 +22,7 @@ mod test {
     use super::expand_camel;
 
     #[test]
-    fn wowz() {
+    fn camel_test() {
         let lexeme = "HelloWorld".to_string();
         let token = Token {
             kind: TokenKind::Identifier,
