@@ -8,9 +8,9 @@ It handles camel and pascal case by breaking up the words. Supports a multitude 
 
 Rustproof is built on top of Hunspell which is the spellchecker which powers libre office.
 
-This spellchecker is primarily built for neovim but can be used in any editor which supports the language server protocol.
+Rustproof is primarily built for neovim but can be used in any editor which supports the language server protocol.
 
-# How it works
+## How it works
 
 The concept is simple, split camelCase and snake_case words before checking them against a list of known words.
 
@@ -19,7 +19,7 @@ The concept is simple, split camelCase and snake_case words before checking them
 - snake_case_words -> snake case words
 - kebab-case-words -> snake case words
 
-# Things to note
+## Things to note
 
 - The local spellchecker is case insensitive. It will not catch errors like english which should be English.
 - The spellchecker uses dictionaries stored locally. It does not send anything outside your machine.
