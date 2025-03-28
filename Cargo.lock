@@ -1390,13 +1390,11 @@ dependencies = [
  "env_logger",
  "hunspell-rs",
  "log",
- "once_cell",
  "oneshot",
  "parking_lot",
  "reqwest",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
  "tower-lsp",
 ]
