@@ -43,7 +43,7 @@ impl Backend {
 
         tokens
             .iter()
-            .filter(|t| self.spell_check(&t.lexeme))
+            .filter(|t| !self.spell_check(&t.lexeme))
             .filter(|t| !self.local_dict.contains(&t.lexeme))
             .map(|t| {
                 Diagnostic::new(
@@ -143,15 +143,25 @@ impl Backend {
         self.client.log_message(MessageType::INFO, v).await
     }
 
-    fn start_spellchecker(&self) {
+    async fn start_spellchecker(&self) {
         let (suggester, suggester_tx) = mpsc::channel::<(String, oneshot::Sender<Vec<String>>)>();
         *self.suggester.write() = Some(suggester);
+        let dicts = { self.config.read().dictionaries.clone() };
+
+        let mut paths = Vec::with_capacity(dicts.len());
+
+        for dict in dicts {
+            let path = dict.resolve().await;
+            paths.push(path);
+        }
+
+        let suggestion_paths = paths.clone();
 
         thread::spawn(move || {
-            let checkers = vec![Hunspell::new(
-                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.aff",
-                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.dic",
-            )];
+            let checkers: Vec<_> = suggestion_paths
+                .iter()
+                .map(|p| Hunspell::new(p.aff.to_str().unwrap(), p.dic.to_str().unwrap()))
+                .collect();
 
             while let Ok((word, send)) = suggester_tx.recv() {
                 let suggestions = checkers
@@ -174,14 +184,14 @@ impl Backend {
         *self.checker.write() = Some(checker);
 
         thread::spawn(move || {
-            let spell_checkers = vec![Hunspell::new(
-                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.aff",
-                "/Users/maxnetterberg/Projects/rustproof/languages/en/en_AU.dic",
-            )];
+            let checkers: Vec<_> = paths
+                .iter()
+                .map(|p| Hunspell::new(p.aff.to_str().unwrap(), p.dic.to_str().unwrap()))
+                .collect();
             while let Ok((word, send)) = checker_tx.recv() {
-                let result = &spell_checkers
+                let result = &checkers
                     .iter()
-                    .any(|c| c.check(&word) == CheckResult::MissingInDictionary);
+                    .any(|c| c.check(&word) == CheckResult::FoundInDictionary);
                 let _ = send.send(*result);
             }
         });
@@ -191,20 +201,14 @@ impl Backend {
         let (rx, tx) = oneshot::channel();
         let checker = self.checker.read();
         let _ = checker.as_ref().unwrap().send((word.to_string(), rx));
-        match tx.recv() {
-            Ok(ok) => ok,
-            Err(_) => false,
-        }
+        tx.recv().unwrap_or(true)
     }
 
     fn suggest(&self, word: &str) -> Vec<String> {
         let (rx, tx) = oneshot::channel();
         let suggester = self.suggester.read();
         let _ = suggester.as_ref().unwrap().send((word.to_string(), rx));
-        match tx.recv() {
-            Ok(ok) => ok,
-            Err(_) => vec![],
-        }
+        tx.recv().unwrap_or(vec![])
     }
 }
 
@@ -213,7 +217,7 @@ impl LanguageServer for Backend {
     async fn initialize(&self, init: InitializeParams) -> Result<InitializeResult> {
         self.load_config(init).await;
         self.load_local_dict_from_file();
-        self.start_spellchecker();
+        self.start_spellchecker().await;
 
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
