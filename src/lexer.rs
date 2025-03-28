@@ -111,11 +111,36 @@ impl Lexer {
         }
     }
 
+    fn is_accepted_char(&self, char: char) -> bool {
+        match char {
+            'a'..='z'
+            | 'A'..='Z'
+            | 'å'
+            | 'Å'
+            | 'ä'
+            | 'Ä'
+            | 'ö'
+            | 'Ö'
+            | 'ø'
+            | 'í'
+            | 'ü'
+            | 'ą'
+            | 'č'
+            | 'ę'
+            | 'ė'
+            | 'į'
+            | 'š'
+            | 'ų'
+            | 'ž' => true,
+            _ => false,
+        }
+    }
+
     fn next_token(&mut self) -> Option<Token> {
         let next_char = self.peek()?;
 
         match next_char {
-            'a'..='z' | 'A'..='Z' => self.identifier(),
+            c if self.is_accepted_char(c) => self.identifier(),
             _ => {
                 self.next()?;
                 return self.next_token();
@@ -144,6 +169,7 @@ impl Lexer {
     fn identifier(&mut self) -> Option<Token> {
         let start = self.pos();
         let mut lexeme = String::new();
+        let mut maybe_quote: Option<char> = None;
 
         loop {
             let Some(char) = self.peek() else {
@@ -151,9 +177,16 @@ impl Lexer {
             };
 
             match char {
-                'a'..='z' | 'A'..='Z' | '\'' => {
+                c if self.is_accepted_char(c) => {
+                    // we only care about single quotes if they occur
+                    // in the middle of a word
+                    if let Some(quote) = maybe_quote {
+                        lexeme += &quote.to_string();
+                        maybe_quote = None
+                    }
                     lexeme += &self.next()?.to_string();
                 }
+                '\'' => maybe_quote = self.next(),
                 _ => break,
             }
         }

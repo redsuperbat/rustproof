@@ -36,6 +36,7 @@ struct Backend {
 
 impl Backend {
     async fn spell_check_code(&self, code: &str) -> Vec<Diagnostic> {
+        let severity = { self.config.read().diagnostic_severity.clone() };
         let lexer = Lexer::new(code);
         let tokens = Pipeline::new().run(lexer);
 
@@ -43,19 +44,16 @@ impl Backend {
             .iter()
             .filter(|t| !self.spell_check(&t.lexeme))
             .filter(|t| !self.local_dict.contains(&t.lexeme))
-            .map(|t| {
-                Diagnostic::new(
-                    Range {
-                        start: Position::new(t.start.line, t.start.col),
-                        end: Position::new(t.end.line, t.end.col),
-                    },
-                    Some(DiagnosticSeverity::INFORMATION),
-                    Some(NumberOrString::String(t.lexeme.to_string())),
-                    None,
-                    format!("Unknown word {}", t.lexeme),
-                    None,
-                    None,
-                )
+            .map(|t| Diagnostic {
+                range: Range {
+                    start: Position::new(t.start.line, t.start.col),
+                    end: Position::new(t.end.line, t.end.col),
+                },
+                severity: Some(severity.to_lsp_diagnostic()),
+                code: Some(NumberOrString::Number(1)),
+                message: format!("Unknown word {}", t.lexeme),
+                data: Some(Value::String(t.lexeme.to_string())),
+                ..Default::default()
             })
             .collect::<Vec<_>>()
     }
@@ -294,7 +292,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let Some(NumberOrString::String(word)) = diagnostic_under_cursor.code.as_ref() else {
+        let Some(Value::String(word)) = diagnostic_under_cursor.data.as_ref() else {
             return Ok(None);
         };
 

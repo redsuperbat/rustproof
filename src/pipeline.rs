@@ -11,8 +11,8 @@ impl Pipeline {
     pub fn run(&self, lexer: Lexer) -> Vec<Token> {
         lexer
             .into_iter()
-            // We ignore tokens with a lexeme of length 3 since it's not
-            // relevant for spelling mistakes
+            // We ignore tokens with a lexeme shorter than 4 characters
+            // Those are not relevant for spelling mistakes
             .filter(|v| v.lexeme.len() > 3)
             .flat_map(|v| {
                 if let Some(t) = v.expand() {
@@ -20,6 +20,9 @@ impl Pipeline {
                 }
                 return vec![v];
             })
+            // After expansion the tokens could be broken into smaller ones
+            // therefore we filter again the first is just a performance optimization
+            .filter(|v| v.lexeme.len() > 3)
             .collect()
     }
 }

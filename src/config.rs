@@ -6,6 +6,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
+use tower_lsp::lsp_types::DiagnosticSeverity;
 
 #[derive(Deserialize, Clone)]
 pub struct Dictionary {
@@ -52,11 +53,33 @@ impl Dictionary {
 }
 
 #[derive(Deserialize, Clone)]
+#[serde(rename_all = "lowercase")] // Ensures case-insensitivity
+pub enum ConfigDiagnosticSeverity {
+    Error,
+    Info,
+    Warning,
+    Hint,
+}
+
+impl ConfigDiagnosticSeverity {
+    pub fn to_lsp_diagnostic(&self) -> DiagnosticSeverity {
+        match self {
+            ConfigDiagnosticSeverity::Error => DiagnosticSeverity::ERROR,
+            ConfigDiagnosticSeverity::Info => DiagnosticSeverity::INFORMATION,
+            ConfigDiagnosticSeverity::Warning => DiagnosticSeverity::WARNING,
+            ConfigDiagnosticSeverity::Hint => DiagnosticSeverity::HINT,
+        }
+    }
+}
+
+#[derive(Deserialize, Clone)]
 pub struct Config {
     #[serde(default = "default_dict_path")]
     pub dict_path: PathBuf,
     #[serde(default = "default_dictionaries")]
     pub dictionaries: Vec<Dictionary>,
+    #[serde(default = "default_diagnostic_severity")]
+    pub diagnostic_severity: ConfigDiagnosticSeverity,
 }
 
 impl Default for Config {
@@ -64,21 +87,26 @@ impl Default for Config {
         Self {
             dict_path: default_dict_path(),
             dictionaries: default_dictionaries(),
+            diagnostic_severity: default_diagnostic_severity(),
         }
     }
+}
+
+fn default_diagnostic_severity() -> ConfigDiagnosticSeverity {
+    ConfigDiagnosticSeverity::Error
 }
 
 fn default_dictionaries() -> Vec<Dictionary> {
     let en_au_coding = Dictionary {
         language: "en_AU_coding".to_string(),
-        aff:"https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.aff".to_string() ,
+        aff: "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.aff".to_string() ,
         dic: "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.dic".to_string()
     };
     let en_us = Dictionary {
-           language: "en_US".to_string(),
-           aff:"https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff".to_string() ,
-           dic: "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic".to_string()
-       };
+        language: "en_US".to_string(),
+        aff: "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff".to_string() ,
+        dic: "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic".to_string()
+    };
     vec![en_au_coding, en_us]
 }
 
