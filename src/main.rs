@@ -1,7 +1,7 @@
 use config::{expand_tilde, Config};
 use dashmap::DashMap;
 use hunspell_rs::{CheckResult, Hunspell};
-use lexer::Lexer;
+use lexer::{Lexer, Token};
 use local_dictionary::LocalDictionary;
 use log::info;
 use parking_lot::RwLock;
@@ -35,15 +35,21 @@ struct Backend {
 }
 
 impl Backend {
-    async fn spell_check_code(&self, code: &str) -> Vec<Diagnostic> {
-        let severity = { self.config.read().diagnostic_severity.clone() };
+    fn misspelled_tokens(&self, code: &str) -> Vec<Token> {
         let lexer = Lexer::new(code);
         let tokens = pipeline::run(lexer);
 
         tokens
-            .iter()
+            .into_iter()
             .filter(|t| !self.spell_check(&t.lexeme))
             .filter(|t| !self.local_dict.contains(&t.lexeme))
+            .collect()
+    }
+
+    fn spell_check_code(&self, code: &str) -> Vec<Diagnostic> {
+        let severity = { self.config.read().diagnostic_severity.clone() };
+        self.misspelled_tokens(code)
+            .iter()
             .map(|t| Diagnostic {
                 range: Range {
                     start: Position::new(t.start.line, t.start.col),
@@ -56,6 +62,26 @@ impl Backend {
                 ..Default::default()
             })
             .collect::<Vec<_>>()
+    }
+
+    async fn add_all_to_dict(&self, params: ExecuteCommandParams) {
+        info!("Adding all spelling mistakes to local dict");
+        let [Value::String(uri)] = &params.arguments.as_slice() else {
+            return;
+        };
+        let Some(source) = self.sources.get(uri) else {
+            return;
+        };
+        let misspelled_words = self
+            .misspelled_tokens(&source)
+            .into_iter()
+            .map(|t| t.lexeme)
+            .collect::<HashSet<_>>();
+
+        for word in misspelled_words {
+            self.insert_into_local_dict(&word);
+        }
+        self.client.workspace_diagnostic_refresh().await.unwrap()
     }
 
     async fn replace_with_word(&self, params: ExecuteCommandParams) {
@@ -81,9 +107,12 @@ impl Backend {
         let Some(source) = self.sources.get(&uri.to_string()) else {
             return;
         };
-        let misspelled_words = self.spell_check_code(&source).await;
+        let diagnostics = self.spell_check_code(&source);
+        if diagnostics.is_empty() {
+            return;
+        }
         self.client
-            .publish_diagnostics(uri.clone(), misspelled_words, None)
+            .publish_diagnostics(uri.clone(), diagnostics, None)
             .await;
     }
 
@@ -229,8 +258,12 @@ impl LanguageServer for Backend {
                     },
                 )),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["replace.with.word".to_string(), "add.to.dict".to_string()],
-                    work_done_progress_options: Default::default(),
+                    commands: vec![
+                        "replace.with.word".to_string(),
+                        "add.to.dict".to_string(),
+                        "add.all.to.dict".to_string(),
+                    ],
+                    ..Default::default()
                 }),
                 ..Default::default()
             },
@@ -248,7 +281,7 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         info!("opened file");
-        let misspelled_words = self.spell_check_code(&params.text_document.text).await;
+        let misspelled_words = self.spell_check_code(&params.text_document.text);
         self.sources.insert(
             params.text_document.uri.to_string(),
             params.text_document.text,
@@ -267,7 +300,7 @@ impl LanguageServer for Backend {
             return;
         };
 
-        let misspelled_words = self.spell_check_code(&text).await;
+        let misspelled_words = self.spell_check_code(&text);
         self.sources
             .insert(params.text_document.uri.to_string(), text);
         self.client
@@ -292,7 +325,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let mut suggestions = self
+        let mut code_actions = self
             .suggest(word)
             .iter()
             .map(|w| {
@@ -322,7 +355,7 @@ impl LanguageServer for Backend {
             .collect::<Vec<_>>();
 
         let title = format!("Add \"{word}\" to dictionary");
-        suggestions.push(CodeActionOrCommand::CodeAction(CodeAction {
+        code_actions.push(CodeActionOrCommand::CodeAction(CodeAction {
             title: title.to_string(),
             command: Some(Command {
                 title,
@@ -335,13 +368,25 @@ impl LanguageServer for Backend {
             ..Default::default()
         }));
 
-        Ok(Some(suggestions))
+        let title = format!("Add all misspelled words in current file to local dictionary");
+        code_actions.push(CodeActionOrCommand::CodeAction(CodeAction {
+            title: title.to_string(),
+            command: Some(Command {
+                title,
+                command: "add.all.to.dict".to_string(),
+                arguments: Some(vec![Value::String(uri.to_string())]),
+            }),
+            ..Default::default()
+        }));
+
+        Ok(Some(code_actions))
     }
 
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
         match params.command.as_str() {
             "add.to.dict" => self.add_to_dict(params).await,
             "replace.with.word" => self.replace_with_word(params).await,
+            "add.all.to.dict" => self.add_all_to_dict(params).await,
             _ => {}
         };
         return Ok(None);
