@@ -29,7 +29,7 @@ struct Backend {
     client: Client,
     config: RwLock<Config>,
     local_dict: LocalDictionary,
-    sources: DashMap<String, SourceCode>,
+    sources: DashMap<Url, SourceCode>,
     checker: RwLock<Option<mpsc::Sender<(String, oneshot::Sender<bool>)>>>,
     suggester: RwLock<Option<mpsc::Sender<(String, oneshot::Sender<Vec<String>>)>>>,
 }
@@ -69,7 +69,8 @@ impl Backend {
         let [Value::String(uri)] = &params.arguments.as_slice() else {
             return;
         };
-        let Some(source) = self.sources.get(uri) else {
+        let Ok(uri) = Url::from_str(uri) else { return };
+        let Some(source) = self.sources.get(&uri) else {
             return;
         };
         let misspelled_words = self
@@ -81,7 +82,7 @@ impl Backend {
         for word in misspelled_words {
             self.insert_into_local_dict(&word);
         }
-        self.client.workspace_diagnostic_refresh().await.unwrap()
+        self.spell_check_uri(uri).await;
     }
 
     async fn replace_with_word(&self, params: ExecuteCommandParams) {
@@ -104,15 +105,12 @@ impl Backend {
     }
 
     async fn spell_check_uri(&self, uri: Url) {
-        let Some(source) = self.sources.get(&uri.to_string()) else {
+        let Some(source) = self.sources.get(&uri) else {
             return;
         };
         let diagnostics = self.spell_check_code(&source);
-        if diagnostics.is_empty() {
-            return;
-        }
         self.client
-            .publish_diagnostics(uri.clone(), diagnostics, None)
+            .publish_diagnostics(uri, diagnostics, None)
             .await;
     }
 
@@ -282,13 +280,11 @@ impl LanguageServer for Backend {
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         info!("opened file");
         let misspelled_words = self.spell_check_code(&params.text_document.text);
-        self.sources.insert(
-            params.text_document.uri.to_string(),
-            params.text_document.text,
-        );
+        self.sources
+            .insert(params.text_document.uri.clone(), params.text_document.text);
         self.client
             .publish_diagnostics(
-                params.text_document.uri.clone(),
+                params.text_document.uri,
                 misspelled_words,
                 Some(params.text_document.version),
             )
@@ -301,10 +297,9 @@ impl LanguageServer for Backend {
         };
 
         let misspelled_words = self.spell_check_code(&text);
-        self.sources
-            .insert(params.text_document.uri.to_string(), text);
+        self.sources.insert(params.text_document.uri.clone(), text);
         self.client
-            .publish_diagnostics(params.text_document.uri.clone(), misspelled_words, None)
+            .publish_diagnostics(params.text_document.uri, misspelled_words, None)
             .await;
     }
 
