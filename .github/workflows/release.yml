@@ -16,6 +16,11 @@ jobs:
       - name: 🔨 Build
         run: cargo build --release
 
+      - name: 🤖 Install Clang/LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang llvm libclang-dev
+
       - name: 📤 Upload Artifact
         uses: actions/upload-artifact@v4
         with:
