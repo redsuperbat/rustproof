@@ -25,7 +25,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rustproof-linux
-          path: target/release/rustproof.exe
+          path: target/release/rustproof
 
   build-macos:
     runs-on: macos-latest
