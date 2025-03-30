@@ -15,14 +15,10 @@ jobs:
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-      - name: 🦀 Install Rust
-        uses: actions-rs/toolchain@v2
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+
       - name: 🔨 Build
         run: cargo build --release --target ${{ matrix.target }}
+
       - name: 📦 Package
         shell: bash
         run: |
@@ -32,6 +28,7 @@ jobs:
           else
             cp target/${{ matrix.target }}/release/rustproof dist/rustproof-${{ matrix.target }}
           fi
+
       - name: 📤 Upload Artifact
         uses: actions/upload-artifact@v4
         with:
