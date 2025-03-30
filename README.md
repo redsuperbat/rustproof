@@ -1,14 +1,10 @@
 # Rustproof
 
-A fast, extensible code checker written in Rust.
+A fast, extensible code checker written in Rust. Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code. It handles a multitude of casings by breaking words into individual components. It supports multiple natural and programming languages. Rustproof is built on top of [Hunspell](https://hunspell.github.io/), the spellchecker that powers LibreOffice. While Rustproof is primarily built for Neovim, it can be used in any editor that supports the Language Server Protocol.
 
-Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code.
+## Why use this and not [cspell](https://cspell.org/)?
 
-It handles a multitude of casings by breaking words into individual components. It supports multiple natural and programming languages.
-
-Rustproof is built on top of Hunspell, the spellchecker that powers LibreOffice.
-
-While Rustproof is primarily built for Neovim, it can be used in any editor that supports the Language Server Protocol.
+Since Rustproof is written in rust and the implementation is fairly simple it makes the server quite fast. It's also much easier to add more dictionaries when using an editor such as Neovim.
 
 ## How It Works
 
@@ -21,11 +17,11 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 
 ## Things to Note
 
-- The local spellchecker is **case-insensitive**. It will not catch errors like "english," which should be "English."
+- The local dictionary is **case-insensitive**. It will not catch errors like "english," which should be "English." Hunspell dictionaries will flag these errors though!
 - The spellchecker uses **dictionaries stored locally** and does **not** send data outside your machine.
 - **Dictionaries may contain errors** and missing words.
 - Only words longer than **three characters** are checked. For example, "jsj" is ignored, while "jsja" is checked.
-- **Symbols and punctuation are ignored.**
+- **Symbols and punctuation are ignored.** Except for single quotes in words such as `it's` and `wouldn't`
 
 ## Adding Dictionaries
 
