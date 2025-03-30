@@ -71,7 +71,6 @@ impl Iterator for Lexer {
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    pub kind: TokenKind,
     pub start: Pos,
     pub end: Pos,
     pub lexeme: String,
@@ -87,11 +86,6 @@ impl Into<Location> for Token {
     fn into(self) -> Location {
         (&self).into()
     }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum TokenKind {
-    Identifier,
 }
 
 impl Lexer {
@@ -193,12 +187,7 @@ impl Lexer {
 
         let end = self.pos();
 
-        Some(Token {
-            end,
-            start,
-            kind: TokenKind::Identifier,
-            lexeme,
-        })
+        Some(Token { end, start, lexeme })
     }
 }
 
