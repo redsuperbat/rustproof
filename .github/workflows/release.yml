@@ -40,6 +40,9 @@ jobs:
       - name: 🦀 Install Rust Target
         run: rustup target add ${{ matrix.target }}
 
+      - name: Install LLVM
+        run: brew install llvm
+
       - name: 🔨 Build
         run: cargo build --release --target ${{ matrix.target }}
 
