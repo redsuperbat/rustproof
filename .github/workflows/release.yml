@@ -13,13 +13,13 @@ jobs:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 🔨 Build
-        run: cargo build --release
-
       - name: 🤖 Install Clang/LLVM
         run: |
           sudo apt-get update
           sudo apt-get install clang llvm libclang-dev
+
+      - name: 🔨 Build
+        run: cargo build --release
 
       - name: 📤 Upload Artifact
         uses: actions/upload-artifact@v4
