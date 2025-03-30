@@ -31,20 +31,70 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 
 Since Rustproof is based on Hunspell, you can add many additional dictionaries. See [this repository](https://github.com/wooorm/dictionaries/tree/main/dictionaries) for more options.
 
-## LSP Configuration
+## LSP Initialization Options (`init_options`)
 
-### Options
+Configuration options passed during LSP initialization.
 
-| Option                | Type          | Default Value | Description                                                                                                                                                                   |
-| :-------------------- | :------------ | :------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dict_path`           | `string`      |               | Specifies the path to a local dictionary file. Words added via LSP actions (like "add to dictionary") will be saved here.                                                     |
-| `diagnostic_severity` | `string`      |               | Sets the severity level reported for spelling diagnostics in the editor. Options are `"error"`, `"warning"`, `"info"`, or `"hint"`.                                           |
-| `dictionaries`        | `list(table)` |               | A list of dictionaries to load for spellchecking. Each entry in the list is an object specifying the dictionary details. The LSP will automatically download and cache these. |
-|                       | `table`       |               | - `language`: (`string`) An identifier for the language (e.g., "en", "en_code", "sv").                                                                                        |
-|                       |               |               | - `aff`: (`string`) The URL to the Hunspell affix (`.aff`) file for this dictionary.                                                                                          |
-|                       |               |               | - `dic`: (`string`) The URL to the Hunspell dictionary (`.dic`) file for this dictionary.                                                                                     |
+---
 
-### Neovim (/lsp/rustproof.lua)
+### `dict_path`
+
+- **Type**: `string`
+- **Default**: `<system-config-path>/rustproof/dict.txt`
+- **Description**: Specifies the path to a local dictionary file. Words added via LSP actions (like "add to dictionary") will be saved here.
+- **Example**: `dict_path = "~/.config/nvim/lsp/rustproof-dict.txt"`
+
+---
+
+### `diagnostic_severity`
+
+- **Type**: `string`
+- **Default**: `error`
+- **Description**: Sets the severity level reported for spelling diagnostics in the editor. Common values might include `"error"`, `"warning"`, `"info"`, or `"hint"`.
+- **Example**: `diagnostic_severity = "warning"`
+
+---
+
+### `dictionaries`
+
+- **Type**: `table` (list of tables)
+- **Description**: A list of dictionaries to load for spellchecking. Each entry in the list is a table specifying the dictionary details. The LSP will automatically download and cache these dictionaries on first use if they are not present locally.
+- **Structure of each dictionary entry**:
+  - `language`
+    - **Type**: `string`
+    - **Required**: Yes
+    - **Description**: An identifier for the language (e.g., "en", "en_code", "sv"). Used internally and potentially for selecting dictionaries.
+    - **Example**: `"en"`
+  - `aff`
+    - **Type**: `string`
+    - **Required**: Yes
+    - **Description**: The URL to the Hunspell affix (`.aff`) file for this dictionary.
+    - **Example**: `"https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff"`
+  - `dic`
+    - **Type**: `string`
+    - **Required**: Yes
+    - **Description**: The URL to the Hunspell dictionary (`.dic`) file for this dictionary.
+    - **Example**: `"https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic"`
+- **Default**:
+```lua
+[
+  {
+    language = "en_AU_coding",
+    aff = "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.aff",
+    dic = "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.dic",
+  },
+  {
+    language = "en_US",
+    aff = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff",
+    dic = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic",
+  },
+]
+```
+
+
+---
+
+## Example neovim configuration
 
 ```lua
 return {
