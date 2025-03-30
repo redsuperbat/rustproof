@@ -47,6 +47,11 @@ jobs:
           echo "/usr/local/opt/llvm/lib" >> "$GITHUB_PATH"
           echo "/usr/local/opt/llvm/bin" >> "$GITHUB_PATH"
 
+      - name: Set environment variables
+        run: |
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+          echo "DYLD_LIBRARY_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+
       - name: 🔨 Build
         run: cargo build --release --target ${{ matrix.target }}
 
