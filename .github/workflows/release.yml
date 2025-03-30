@@ -20,6 +20,11 @@ jobs:
       - name: 🦀 Install Rust Target
         run: rustup target add ${{ matrix.target }}
 
+      - name: 🤖 Install Clang/LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang llvm libclang-dev
+
       - name: 🔨 Build
         run: cargo build --release --target ${{ matrix.target }}
 
