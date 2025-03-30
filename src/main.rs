@@ -1,3 +1,4 @@
+use clap::Parser;
 use config::{expand_tilde, Config};
 use dashmap::DashMap;
 use hunspell_rs::{CheckResult, Hunspell};
@@ -388,10 +389,15 @@ impl LanguageServer for Backend {
     }
 }
 
+/// A fast, extensible code checker written in Rust. Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code. It handles a multitude of casings by breaking words into individual components.
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
-
+    Args::parse();
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
 
     let (service, socket) = LspService::new(|client| Backend {
