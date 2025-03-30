@@ -389,7 +389,7 @@ impl LanguageServer for Backend {
     }
 }
 
-/// A fast, extensible code checker written in Rust. Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code. It handles a multitude of casings by breaking words into individual components.
+/// A fast, extensible code checker. Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code. It handles a multitude of casings by breaking words into individual components.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {}
