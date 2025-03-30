@@ -40,8 +40,12 @@ jobs:
       - name: 🦀 Install Rust Target
         run: rustup target add ${{ matrix.target }}
 
+
       - name: Install LLVM
-        run: brew install llvm
+        run: |
+          brew install llvm
+          echo "/usr/local/opt/llvm/lib" >> "$GITHUB_PATH"
+          echo "/usr/local/opt/llvm/bin" >> "$GITHUB_PATH"
 
       - name: 🔨 Build
         run: cargo build --release --target ${{ matrix.target }}
