@@ -191,10 +191,7 @@ impl Backend {
                     .filter(|s| s.len() > 2)
                     // remove duplicates
                     .collect::<HashSet<_>>()
-                    .iter()
-                    // Take first four suggestions to not overload client
-                    .take(4)
-                    .map(|s| s.to_owned())
+                    .into_iter()
                     .collect::<Vec<_>>();
 
                 let _ = send.send(suggestions);
