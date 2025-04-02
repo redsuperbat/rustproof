@@ -17,7 +17,7 @@ pub fn is_camel(string: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::lexer::{Pos, Token, TokenKind};
+    use crate::lexer::{Pos, Token};
 
     use super::expand_camel;
 
@@ -25,7 +25,6 @@ mod test {
     fn camel_test() {
         let lexeme = "HelloWorld".to_string();
         let token = Token {
-            kind: TokenKind::Identifier,
             start: Pos::start(),
             end: Pos {
                 line: 0,
