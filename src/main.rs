@@ -58,7 +58,7 @@ impl Backend {
                 },
                 severity: Some(severity.to_lsp_diagnostic()),
                 code: Some(NumberOrString::Number(1)),
-                message: format!("Unknown word {}", t.lexeme),
+                message: format!("Unknown word \"{}\"", t.lexeme),
                 data: Some(Value::String(t.lexeme.to_string())),
                 ..Default::default()
             })
