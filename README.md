@@ -4,8 +4,8 @@ A fast, extensible code checker written in Rust. Rustproof uses the Language Ser
 
 
 
-![output](https://github.com/user-attachments/assets/2eae4c02-71ef-40a1-b71b-fd08bea598bc)
 
+![output](https://github.com/user-attachments/assets/3f209142-05af-4fce-9a11-cacec8e7d930)
 
 
 
