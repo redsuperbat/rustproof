@@ -2,6 +2,12 @@
 
 A fast, extensible code checker written in Rust. Rustproof uses the Language Server Protocol (LSP) to communicate with your editor and detect spelling mistakes in your code. It handles a multitude of casings by breaking words into individual components. It supports multiple natural and programming languages. Rustproof is built on top of [Hunspell](https://hunspell.github.io/), the spellchecker that powers LibreOffice. While Rustproof is primarily built for Neovim, it can be used in any editor that supports the Language Server Protocol.
 
+
+
+https://github.com/user-attachments/assets/d60469b3-8c12-4f4d-840b-e8ece6226c13
+
+
+
 ## Why use this and not [cspell](https://cspell.org/)?
 
 Since Rustproof is written in rust and the implementation is fairly simple it makes the server quite fast. It's also much easier to add more dictionaries when using an editor such as Neovim.
