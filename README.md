@@ -25,7 +25,8 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 
 ## Adding Dictionaries
 
-Since Rustproof is based on Hunspell, you can add many additional dictionaries. See [this repository](https://github.com/wooorm/dictionaries/tree/main/dictionaries) for more options.
+- Since Rustproof is based on Hunspell, you can add many additional dictionaries. See [this repository](https://github.com/wooorm/dictionaries/tree/main/dictionaries) for more options.
+- If Rustproof detects that the dictionaries provided are not available on the local machine it will download and cache them using the reqwest library
 
 ## LSP Initialization Options (`init_options`)
 
@@ -91,6 +92,8 @@ Configuration options passed during LSP initialization.
 ---
 
 ## Example neovim configuration
+
+> [!INFO] /lsp/rustproof.lua
 
 ```lua
 return {
