@@ -105,7 +105,8 @@ ______________________________________________________________________
 
 ## Example neovim configuration
 
-> [!INFO] /lsp/rustproof.lua
+> [!INFO] 
+> The lsp configuration file can be placed in /lsp/rustproof.lua
 
 ```lua
 return {
