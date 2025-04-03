@@ -6,6 +6,18 @@ A fast, extensible code checker written in Rust. Rustproof uses the Language Ser
 
 Since Rustproof is written in rust and the implementation is fairly simple it makes the server quite fast. It's also much easier to add more dictionaries when using an editor such as Neovim.
 
+## Installation
+
+The easiest is probably to clone the repo and build from source:
+
+```sh
+git clone https://github.com/redsuperbat/rustproof.git
+cd rustproof
+cargo build --release
+```
+
+There are also binaries available which are built when a new release happens. Those can be found under the releases section on github.
+
 ## How It Works
 
 The concept is simple: split camelCase, PascalCase, and snake_case words before checking them against a list of known words.
@@ -32,7 +44,7 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 
 Configuration options passed during LSP initialization.
 
----
+______________________________________________________________________
 
 ### `dict_path`
 
@@ -41,7 +53,7 @@ Configuration options passed during LSP initialization.
 - **Description**: Specifies the path to a local dictionary file. Words added via LSP actions (like "add to dictionary") will be saved here.
 - **Example**: `dict_path = "~/.config/nvim/lsp/rustproof-dict.txt"`
 
----
+______________________________________________________________________
 
 ### `diagnostic_severity`
 
@@ -50,7 +62,7 @@ Configuration options passed during LSP initialization.
 - **Description**: Sets the severity level reported for spelling diagnostics in the editor. Common values might include `"error"`, `"warning"`, `"info"`, or `"hint"`.
 - **Example**: `diagnostic_severity = "warning"`
 
----
+______________________________________________________________________
 
 ### `dictionaries`
 
@@ -73,6 +85,7 @@ Configuration options passed during LSP initialization.
     - **Description**: The URL to the Hunspell dictionary (`.dic`) file for this dictionary.
     - **Example**: `"https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic"`
 - **Default**:
+
 ```lua
 [
   {
@@ -88,8 +101,7 @@ Configuration options passed during LSP initialization.
 ]
 ```
 
-
----
+______________________________________________________________________
 
 ## Example neovim configuration
 

@@ -84,7 +84,6 @@ jobs:
 
 
   release:
-    if: false
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
@@ -101,4 +100,3 @@ jobs:
         with:
           files: artifacts/**/*
           tag_name: ${{ github.ref_name }}
-          generate_release_notes: true
