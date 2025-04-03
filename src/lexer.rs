@@ -204,7 +204,7 @@ fn fizz_buzz(n: int) {
   fn helper(i: int) {
     if i < n + 1 {
       if 0 == d {
-        printn(\"FizzBuzz\", i)
+        print(\"FizzBuzz\", i)
       } else if 0 == i % 3 {
         print(\"Fizz\", i)
       } else if 0 == i % 5 {
