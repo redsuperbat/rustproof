@@ -6,6 +6,7 @@ use lexer::{Lexer, Token};
 use local_dictionary::LocalDictionary;
 use log::info;
 use parking_lot::RwLock;
+use ropey::Rope;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -24,7 +25,7 @@ mod lexer;
 mod local_dictionary;
 mod pipeline;
 
-type SourceCode = String;
+type SourceCode = Rope;
 
 struct Backend {
     client: Client,
@@ -36,7 +37,7 @@ struct Backend {
 }
 
 impl Backend {
-    fn misspelled_tokens(&self, code: &str) -> Vec<Token> {
+    fn misspelled_tokens(&self, code: &Rope) -> Vec<Token> {
         let lexer = Lexer::new(code);
         let tokens = pipeline::run(lexer);
 
@@ -47,7 +48,7 @@ impl Backend {
             .collect()
     }
 
-    fn spell_check_code(&self, code: &str) -> Vec<Diagnostic> {
+    fn spell_check_code(&self, code: &Rope) -> Vec<Diagnostic> {
         let severity = { self.config.read().diagnostic_severity.clone() };
         self.misspelled_tokens(code)
             .iter()
@@ -88,11 +89,26 @@ impl Backend {
 
     async fn replace_with_word(&self, params: ExecuteCommandParams) {
         info!("Replacing word");
-        let [Value::String(uri)] = &params.arguments.as_slice() else {
+        let [Value::String(uri), range, Value::String(word)] = &params.arguments.as_slice() else {
             return;
         };
+        let range = serde_json::from_value::<Range>(range.to_owned())
+            .expect("Could not convert argument to range");
         let Ok(uri) = Url::from_str(uri) else { return };
-        self.spell_check_uri(uri).await;
+        {
+            let Some(mut source) = self.sources.get_mut(&uri) else {
+                return;
+            };
+            let line_start_char = source.line_to_char(range.start.line as usize);
+            let start_char_idx = line_start_char + range.start.character as usize;
+            let end_char_idx = line_start_char + range.end.character as usize;
+            let start_byte_idx = source.char_to_byte(start_char_idx);
+            let end_byte_idx = source.char_to_byte(end_char_idx);
+            source.remove(start_byte_idx..end_byte_idx);
+            source.insert(start_byte_idx, word);
+        }
+
+        self.spell_check_uri(uri).await
     }
 
     async fn add_to_dict(&self, params: ExecuteCommandParams) {
@@ -192,6 +208,9 @@ impl Backend {
                     // remove duplicates
                     .collect::<HashSet<_>>()
                     .into_iter()
+                    // Take at most 6 suggestions
+                    // TODO: Make this better
+                    .take(6)
                     .collect::<Vec<_>>();
 
                 let _ = send.send(suggestions);
@@ -266,10 +285,6 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn initialized(&self, _: InitializedParams) {
-        info!("initialized");
-    }
-
     async fn shutdown(&self) -> Result<()> {
         info!("shutdown");
         Ok(())
@@ -277,9 +292,9 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         info!("opened file");
-        let misspelled_words = self.spell_check_code(&params.text_document.text);
-        self.sources
-            .insert(params.text_document.uri.clone(), params.text_document.text);
+        let text = Rope::from_str(&params.text_document.text);
+        let misspelled_words = self.spell_check_code(&text);
+        self.sources.insert(params.text_document.uri.clone(), text);
         self.client
             .publish_diagnostics(
                 params.text_document.uri,
@@ -289,10 +304,16 @@ impl LanguageServer for Backend {
             .await;
     }
 
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        info!("closed file");
+        self.sources.remove(&params.text_document.uri);
+    }
+
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         let Some(text) = params.text else {
             return;
         };
+        let text = Rope::from_str(&text);
 
         let misspelled_words = self.spell_check_code(&text);
         self.sources.insert(params.text_document.uri.clone(), text);
@@ -336,7 +357,12 @@ impl LanguageServer for Backend {
                     command: Some(Command {
                         title,
                         command: "replace.with.word".to_string(),
-                        arguments: Some(vec![Value::String(uri.to_string())]),
+                        arguments: Some(vec![
+                            Value::String(uri.to_string()),
+                            serde_json::to_value(diagnostic_under_cursor.range)
+                                .expect("Could not convert range to value"),
+                            Value::String(w.to_string()),
+                        ]),
                     }),
                     edit: Some(WorkspaceEdit {
                         changes: Some(changes),

@@ -1,3 +1,4 @@
+use ropey::Rope;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -54,14 +55,14 @@ impl Location {
 }
 
 #[derive(Debug)]
-pub struct Lexer {
-    text: Vec<char>,
+pub struct Lexer<'a> {
+    text: &'a Rope,
     col: u32,
     line: u32,
     offset: usize,
 }
 
-impl Iterator for Lexer {
+impl Iterator for Lexer<'_> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -88,10 +89,10 @@ impl Into<Location> for Token {
     }
 }
 
-impl Lexer {
-    pub fn new<T: AsRef<str>>(text: T) -> Lexer {
+impl Lexer<'_> {
+    pub fn new<'a>(text: &'a Rope) -> Lexer<'a> {
         return Lexer {
-            text: text.as_ref().chars().collect(),
+            text,
             col: 0,
             line: 0,
             offset: 0,
@@ -158,7 +159,7 @@ impl Lexer {
     }
 
     fn peek(&self) -> Option<char> {
-        self.text.get(self.offset).map(|c| *c)
+        self.text.get_char(self.offset)
     }
 
     fn identifier(&mut self) -> Option<Token> {
@@ -218,7 +219,8 @@ fn fizz_buzz(n: int) {
 
 fizz_buzz(15)
 ";
-        let tokens = Lexer::new(str)
+        let text = Rope::from_str(str);
+        let tokens = Lexer::new(&text)
             .map(|v| v.lexeme)
             .collect::<Vec<_>>()
             .join(" ");
