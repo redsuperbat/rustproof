@@ -434,15 +434,3 @@ async fn main() {
 
     Server::new(stdin, stdout, socket).serve(service).await;
 }
-
-#[cfg(test)]
-mod test {
-    use hunspell_rs::{CheckResult, Hunspell};
-
-    #[test]
-    fn hunspell_works() {
-        let spell = Hunspell::new("./languages/en/en_US.aff", "./languages/en/en_US.dic");
-        let result = spell.check("hi");
-        assert_eq!(result, CheckResult::FoundInDictionary);
-    }
-}

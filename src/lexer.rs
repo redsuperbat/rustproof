@@ -151,7 +151,12 @@ impl<I: Iterator<Item = char>> Lexer<I> {
                     }
                     lexeme += &char.to_string();
                 }
-                '\'' => maybe_quote = Some(char),
+                '\'' => {
+                    if lexeme.is_empty() {
+                        break;
+                    }
+                    maybe_quote = Some(char);
+                }
                 _ => break,
             }
         }
@@ -181,33 +186,40 @@ impl<I: Iterator<Item = char>> Lexer<I> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn lex_source() {
-        let str = "
-fn print(s: string, i: int) {}
 
-fn fizz_buzz(n: int) {
-  fn helper(i: int) {
-    if i < n + 1 {
-      if 0 == d {
-        print(\"FizzBuzz\", i)
-      } else if 0 == i % 3 {
-        print(\"Fizz\", i)
-      } else if 0 == i % 5 {
-        print(\"Buzz\", i)
-      }
-      helper(i + 1)
-    }
-  }
-  helper(1)
-}
-
-fizz_buzz(15)
-";
-        let tokens = Lexer::new(str.chars())
+    fn tokenize(str: &str) -> String {
+        Lexer::new(str.chars())
             .map(|v| v.lexeme)
             .collect::<Vec<_>>()
-            .join(" ");
-        println!("{:?}", tokens)
+            .join(" ")
+    }
+
+    #[test]
+    fn it_creates_tokens_from_snake_case() {
+        let str = "fn fizz_buzz(n: int){}";
+        let tokens = tokenize(str);
+        assert_eq!(tokens, "fn fizz buzz n int");
+    }
+
+    #[test]
+    fn it_creates_tokens_from_kebab_case() {
+        let str = "fn-fizz-buzz(n: int){}";
+        let tokens = tokenize(str);
+        assert_eq!(tokens, "fn fizz buzz n int");
+    }
+
+    #[test]
+    fn it_creates_tokens_with_single_quotes() {
+        let str = "fn fizz_buzz(n: string){ return \"what's up dude\"}";
+        let tokens = tokenize(str);
+        assert_eq!(tokens, "fn fizz buzz n string return what's up dude");
+
+        let str = "fn fizz_buzz(n: string){ return 'hello #{n} world'}";
+        let tokens = tokenize(str);
+        assert_eq!(tokens, "fn fizz buzz n string return hello n world");
+
+        let str = "fn fizz_buzz(n: string){ return 'hello #{n}'}";
+        let tokens = tokenize(str);
+        assert_eq!(tokens, "fn fizz buzz n string return hello n");
     }
 }
