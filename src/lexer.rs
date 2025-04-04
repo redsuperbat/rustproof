@@ -139,7 +139,14 @@ impl<I: Iterator<Item = char>> Lexer<I> {
         let mut end;
         loop {
             end = self.pos();
-            let char = self.next()?;
+
+            let Some(char) = self.next() else {
+                // We are at the end of the file
+                if lexeme.is_empty() {
+                    return None;
+                }
+                return Some(Token { lexeme, start, end });
+            };
 
             match char {
                 c if self.is_accepted_char(c) => {
