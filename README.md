@@ -23,7 +23,7 @@ cd rustproof
 cargo build --release
 ```
 
-There are also binaries available which are built when a new release happens. Those can be found under the releases section on github.
+There are also binaries available which are built when a new release happens. Those can be found under the releases section on [github](https://github.com/redsuperbat/rustproof/releases).
 
 ## How It Works
 
