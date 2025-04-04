@@ -1,4 +1,3 @@
-use ropey::Rope;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -55,14 +54,14 @@ impl Location {
 }
 
 #[derive(Debug)]
-pub struct Lexer<'a> {
-    text: &'a Rope,
+pub struct Lexer<I: Iterator<Item = char>> {
+    text: I,
     col: u32,
     line: u32,
     offset: usize,
 }
 
-impl Iterator for Lexer<'_> {
+impl<I: Iterator<Item = char>> Iterator for Lexer<I> {
     type Item = Token;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -89,9 +88,9 @@ impl Into<Location> for Token {
     }
 }
 
-impl Lexer<'_> {
-    pub fn new<'a>(text: &'a Rope) -> Lexer<'a> {
-        return Lexer {
+impl<I: Iterator<Item = char>> Lexer<I> {
+    pub fn new(text: I) -> Self {
+        return Self {
             text,
             col: 0,
             line: 0,
@@ -133,19 +132,39 @@ impl Lexer<'_> {
     }
 
     fn next_token(&mut self) -> Option<Token> {
-        let next_char = self.peek()?;
+        let start = self.pos();
+        let mut lexeme = String::new();
+        let mut maybe_quote: Option<char> = None;
 
-        match next_char {
-            c if self.is_accepted_char(c) => self.identifier(),
-            _ => {
-                self.next()?;
-                return self.next_token();
+        let mut end;
+        loop {
+            end = self.pos();
+            let char = self.next()?;
+
+            match char {
+                c if self.is_accepted_char(c) => {
+                    // we only care about single quotes if they occur
+                    // in the middle of a word
+                    if let Some(quote) = maybe_quote {
+                        lexeme += &quote.to_string();
+                        maybe_quote = None
+                    }
+                    lexeme += &char.to_string();
+                }
+                '\'' => maybe_quote = Some(char),
+                _ => break,
             }
         }
+
+        if lexeme.is_empty() {
+            return self.next_token();
+        }
+
+        Some(Token { end, start, lexeme })
     }
 
     fn next(&mut self) -> Option<char> {
-        let char = self.peek()?;
+        let char = self.text.next()?;
 
         self.col += 1;
 
@@ -156,40 +175,6 @@ impl Lexer<'_> {
         self.offset += 1;
 
         Some(char)
-    }
-
-    fn peek(&self) -> Option<char> {
-        self.text.get_char(self.offset)
-    }
-
-    fn identifier(&mut self) -> Option<Token> {
-        let start = self.pos();
-        let mut lexeme = String::new();
-        let mut maybe_quote: Option<char> = None;
-
-        loop {
-            let Some(char) = self.peek() else {
-                break;
-            };
-
-            match char {
-                c if self.is_accepted_char(c) => {
-                    // we only care about single quotes if they occur
-                    // in the middle of a word
-                    if let Some(quote) = maybe_quote {
-                        lexeme += &quote.to_string();
-                        maybe_quote = None
-                    }
-                    lexeme += &self.next()?.to_string();
-                }
-                '\'' => maybe_quote = self.next(),
-                _ => break,
-            }
-        }
-
-        let end = self.pos();
-
-        Some(Token { end, start, lexeme })
     }
 }
 
@@ -219,8 +204,7 @@ fn fizz_buzz(n: int) {
 
 fizz_buzz(15)
 ";
-        let text = Rope::from_str(str);
-        let tokens = Lexer::new(&text)
+        let tokens = Lexer::new(str.chars())
             .map(|v| v.lexeme)
             .collect::<Vec<_>>()
             .join(" ");

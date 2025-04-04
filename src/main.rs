@@ -1,12 +1,13 @@
 use clap::Parser;
 use config::{expand_tilde, Config};
+use crop::Rope;
 use dashmap::DashMap;
+use expander::Expandable;
 use hunspell_rs::{CheckResult, Hunspell};
 use lexer::{Lexer, Token};
 use local_dictionary::LocalDictionary;
 use log::info;
 use parking_lot::RwLock;
-use ropey::Rope;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -23,7 +24,6 @@ mod config;
 mod expander;
 mod lexer;
 mod local_dictionary;
-mod pipeline;
 
 type SourceCode = Rope;
 
@@ -37,18 +37,30 @@ struct Backend {
 }
 
 impl Backend {
-    fn misspelled_tokens(&self, code: &Rope) -> Vec<Token> {
-        let lexer = Lexer::new(code);
-        let tokens = pipeline::run(lexer);
-
-        tokens
+    fn misspelled_tokens(&self, code: &SourceCode) -> Vec<Token> {
+        Lexer::new(code.chars())
             .into_iter()
+            // We ignore tokens with a lexeme shorter than 4 characters
+            // Those are not relevant for spelling mistakes
+            .filter(|t| t.lexeme.len() > 3)
+            // Expand camelCase and PascalCase
+            .flat_map(|t| {
+                if let Some(t) = t.expand() {
+                    return t;
+                }
+                return vec![t];
+            })
+            // After expansion the tokens could be broken into smaller ones
+            // therefore we filter again the first is just a performance optimization
+            .filter(|t| t.lexeme.len() > 3)
+            // Hunspell spell-check
             .filter(|t| !self.spell_check(&t.lexeme))
+            // Check against our local dictionary
             .filter(|t| !self.local_dict.contains(&t.lexeme))
             .collect()
     }
 
-    fn spell_check_code(&self, code: &Rope) -> Vec<Diagnostic> {
+    fn spell_check_code(&self, code: &SourceCode) -> Vec<Diagnostic> {
         let severity = { self.config.read().diagnostic_severity.clone() };
         self.misspelled_tokens(code)
             .iter()
@@ -63,7 +75,7 @@ impl Backend {
                 data: Some(Value::String(t.lexeme.to_string())),
                 ..Default::default()
             })
-            .collect::<Vec<_>>()
+            .collect()
     }
 
     async fn add_all_to_dict(&self, params: ExecuteCommandParams) {
@@ -95,20 +107,17 @@ impl Backend {
         let range = serde_json::from_value::<Range>(range.to_owned())
             .expect("Could not convert argument to range");
         let Ok(uri) = Url::from_str(uri) else { return };
-        {
-            let Some(mut source) = self.sources.get_mut(&uri) else {
-                return;
-            };
-            let line_start_char = source.line_to_char(range.start.line as usize);
-            let start_char_idx = line_start_char + range.start.character as usize;
-            let end_char_idx = line_start_char + range.end.character as usize;
-            let start_byte_idx = source.char_to_byte(start_char_idx);
-            let end_byte_idx = source.char_to_byte(end_char_idx);
-            source.remove(start_byte_idx..end_byte_idx);
-            source.insert(start_byte_idx, word);
-        }
-
+        self.replace_word_in_source(&uri, &range, word);
         self.spell_check_uri(uri).await
+    }
+
+    fn replace_word_in_source(&self, uri: &Url, range: &Range, word: &str) {
+        let Some(mut source) = self.sources.get_mut(&uri) else {
+            return;
+        };
+        let start = source.byte_of_line(range.start.line as usize) + range.start.character as usize;
+        let end = start + word.bytes().count();
+        source.replace(start..end, word);
     }
 
     async fn add_to_dict(&self, params: ExecuteCommandParams) {
@@ -292,16 +301,10 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         info!("opened file");
-        let text = Rope::from_str(&params.text_document.text);
-        let misspelled_words = self.spell_check_code(&text);
-        self.sources.insert(params.text_document.uri.clone(), text);
-        self.client
-            .publish_diagnostics(
-                params.text_document.uri,
-                misspelled_words,
-                Some(params.text_document.version),
-            )
-            .await;
+        let source = Rope::from(params.text_document.text);
+        let uri = params.text_document.uri;
+        self.sources.insert(uri.clone(), source);
+        self.spell_check_uri(uri).await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -313,13 +316,10 @@ impl LanguageServer for Backend {
         let Some(text) = params.text else {
             return;
         };
-        let text = Rope::from_str(&text);
-
-        let misspelled_words = self.spell_check_code(&text);
-        self.sources.insert(params.text_document.uri.clone(), text);
-        self.client
-            .publish_diagnostics(params.text_document.uri, misspelled_words, None)
-            .await;
+        let source = Rope::from(text);
+        let uri = params.text_document.uri;
+        self.sources.insert(uri.clone(), source);
+        self.spell_check_uri(uri).await;
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
