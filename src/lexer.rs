@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Pos {
@@ -178,12 +179,13 @@ impl<I: Iterator<Item = char>> Lexer<I> {
     fn next(&mut self) -> Option<char> {
         let char = self.text.next()?;
 
-        self.col += 1;
-
         if char == '\n' {
             self.col = 0;
             self.line += 1;
+        } else {
+            self.col += char.width().unwrap_or(0) as u32;
         }
+
         self.offset += 1;
 
         Some(char)
@@ -213,6 +215,14 @@ mod tests {
         let str = "fn-fizz-buzz(n: int){}";
         let tokens = tokenize(str);
         assert_eq!(tokens, "fn fizz buzz n int");
+    }
+
+    #[test]
+    fn it_handles_unicode_characters() {
+        let str = "🤖 Hellooo";
+        let tokens = Lexer::new(str.chars()).collect::<Vec<_>>();
+        let token = tokens.get(0).unwrap();
+        assert_eq!(token.start.col, 3);
     }
 
     #[test]
