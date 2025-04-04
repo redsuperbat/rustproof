@@ -12,6 +12,10 @@ jobs:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
+      - name: 🤖 Install Clang/LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install clang llvm libclang-dev
+
       - name: 🧪 Test
         run: cargo test
-
