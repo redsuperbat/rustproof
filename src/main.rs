@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{crate_version, Parser};
 use config::{expand_tilde, Config};
 use crop::Rope;
 use dashmap::DashMap;
@@ -28,6 +28,7 @@ mod local_dictionary;
 type SourceCode = Rope;
 
 struct Backend {
+    version: &'static str,
     client: Client,
     config: RwLock<Config>,
     local_dict: LocalDictionary,
@@ -267,7 +268,7 @@ impl LanguageServer for Backend {
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
                 name: "Rustproof".to_string(),
-                version: None,
+                version: Some(self.version.to_string()),
             }),
             offset_encoding: None,
             capabilities: ServerCapabilities {
@@ -422,8 +423,8 @@ async fn main() {
     env_logger::init();
     Args::parse();
     let (stdin, stdout) = (tokio::io::stdin(), tokio::io::stdout());
-
     let (service, socket) = LspService::new(|client| Backend {
+        version: crate_version!(),
         client,
         local_dict: LocalDictionary::new(),
         config: RwLock::new(Config::default()),
