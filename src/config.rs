@@ -22,6 +22,13 @@ pub struct DictionaryPath {
 }
 
 impl Dictionary {
+    pub fn new(language: &str, aff: &str, dic: &str) -> Self {
+        Self {
+            language: language.to_string(),
+            aff: aff.to_string(),
+            dic: dic.to_string(),
+        }
+    }
     pub async fn resolve(&self) -> DictionaryPath {
         let data_dir = data_dir()
             .expect("Could not find data dir")
@@ -97,17 +104,20 @@ fn default_diagnostic_severity() -> ConfigDiagnosticSeverity {
 }
 
 fn default_dictionaries() -> Vec<Dictionary> {
-    let en_au_coding = Dictionary {
-        language: "en_AU_coding".to_string(),
-        aff: "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.aff".to_string() ,
-        dic: "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.dic".to_string()
-    };
-    let en_us = Dictionary {
-        language: "en_US".to_string(),
-        aff: "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff".to_string() ,
-        dic: "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic".to_string()
-    };
-    vec![en_au_coding, en_us]
+    let base_url =
+        "https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries";
+    vec![
+        Dictionary::new(
+            "en-code",
+            &(base_url.to_string() + "/en-code/index.aff"),
+            &(base_url.to_string() + "/en-code/index.aff"),
+        ),
+        Dictionary::new(
+            "en",
+            &(base_url.to_string() + "/en/index.aff"),
+            &(base_url.to_string() + "/en/index.aff"),
+        ),
+    ]
 }
 
 async fn ensure_directory(path: &PathBuf) {
