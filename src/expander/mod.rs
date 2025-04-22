@@ -57,3 +57,26 @@ fn expand_uppercase(token: &Token) -> Vec<Token> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        expander::expand_uppercase,
+        lexer::{Pos, Token},
+    };
+
+    #[test]
+    fn expand_uppercase_test() {
+        let lexeme = "HelloW".to_string();
+        let token = Token {
+            start: Pos::start(),
+            end: Pos {
+                line: 0,
+                col: (lexeme.len() as u32) - 1,
+            },
+            lexeme,
+        };
+        let result = expand_uppercase(&token);
+        assert_eq!(2, result.len())
+    }
+}
