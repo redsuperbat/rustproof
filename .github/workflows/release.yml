@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'
+      - v*
 
 jobs:
   build-linux:
@@ -39,7 +39,6 @@ jobs:
 
       - name: 🦀 Install Rust Target
         run: rustup target add ${{ matrix.target }}
-
 
       - name: Install LLVM
         run: |
@@ -76,7 +75,6 @@ jobs:
           name: rustproof-windows
           path: target/release/rustproof.exe
 
-
   release:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
@@ -94,4 +92,5 @@ jobs:
         with:
           files: artifacts/**/*
           tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
           token: ${{ secrets.RELEASE_TOKEN }}
