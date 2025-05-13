@@ -28,6 +28,9 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 - **PascalCase** → pascal case
 - **snake_case_words** → snake case words
 - **kebab-case-words** → kebab case words
+- **JSONParser** → json parser
+- **DataJSON** → data json
+- **DataJSONParser** → data json parser
 
 ## Things to Note
 
@@ -46,7 +49,7 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 
 Configuration options passed during LSP initialization.
 
-______________________________________________________________________
+---
 
 ### `dict_path`
 
@@ -55,7 +58,7 @@ ______________________________________________________________________
 - **Description**: Specifies the path to a local dictionary file. Words added via LSP actions (like "add to dictionary") will be saved here.
 - **Example**: `dict_path = "~/.config/nvim/lsp/rustproof-dict.txt"`
 
-______________________________________________________________________
+---
 
 ### `diagnostic_severity`
 
@@ -64,7 +67,7 @@ ______________________________________________________________________
 - **Description**: Sets the severity level reported for spelling diagnostics in the editor. Common values might include `"error"`, `"warning"`, `"info"`, or `"hint"`.
 - **Example**: `diagnostic_severity = "warning"`
 
-______________________________________________________________________
+---
 
 ### `dictionaries`
 
@@ -103,7 +106,7 @@ ______________________________________________________________________
 ]
 ```
 
-______________________________________________________________________
+---
 
 ## Example Neovim configuration
 
