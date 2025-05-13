@@ -20,11 +20,11 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
+mod buffered_peekable;
 mod config;
 mod expander;
 mod lexer;
 mod local_dictionary;
-mod peekable_n;
 
 type SourceCode = Rope;
 

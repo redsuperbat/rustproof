@@ -1,4 +1,4 @@
-use crate::{lexer::Token, peekable_n::BufferedPeekable};
+use crate::{buffered_peekable::BufferedPeekable, lexer::Token};
 
 pub trait Expandable {
     fn expand(&self) -> Vec<Token>;
