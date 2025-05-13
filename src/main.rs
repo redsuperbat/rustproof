@@ -24,6 +24,7 @@ mod config;
 mod expander;
 mod lexer;
 mod local_dictionary;
+mod peekable_n;
 
 type SourceCode = Rope;
 
@@ -44,13 +45,8 @@ impl Backend {
             // We ignore tokens with a lexeme shorter than 4 characters
             // Those are not relevant for spelling mistakes
             .filter(|t| t.lexeme.len() > 3)
-            // Expand camelCase and PascalCase
-            .flat_map(|t| {
-                if let Some(t) = t.expand() {
-                    return t;
-                }
-                return vec![t];
-            })
+            // Expand camelCase, PascalCase and ABBRCase etc.
+            .flat_map(|t| t.expand())
             // After expansion the tokens could be broken into smaller ones
             // therefore we filter again the first is just a performance optimization
             .filter(|t| t.lexeme.len() > 3)
