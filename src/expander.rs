@@ -82,6 +82,10 @@ impl<I: Iterator<Item = char>> Expander<I> {
 
 impl Expandable for Token {
     fn expand(&self) -> Vec<Token> {
+        let only_alphanumeric = self.lexeme.chars().all(|c| c.is_alphanumeric());
+        if !only_alphanumeric {
+            return vec![self.to_owned()];
+        }
         let mut start = self.start.col;
         Expander::new(self.lexeme.chars())
             .into_iter()
