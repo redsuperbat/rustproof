@@ -83,25 +83,25 @@ Configuration options passed during LSP initialization.
     - **Type**: `string`
     - **Required**: Yes
     - **Description**: The URL to the Hunspell affix (`.aff`) file for this dictionary.
-    - **Example**: `"https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff"`
+    - **Example**: `"https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en/index.aff"`
   - `dic`
     - **Type**: `string`
     - **Required**: Yes
     - **Description**: The URL to the Hunspell dictionary (`.dic`) file for this dictionary.
-    - **Example**: `"https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic"`
+    - **Example**: `"https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en/index.dic"`
 - **Default**:
 
 ```lua
 [
   {
-    language = "en_AU_coding",
-    aff = "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.aff",
-    dic = "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.dic",
+    language = "en-code",
+    aff = "https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en-code/index.aff",
+    dic = "https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en-code/index.dic",
   },
   {
-    language = "en_US",
-    aff = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff",
-    dic = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic",
+    language = "en",
+    aff = "https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en/index.aff",
+    dic = "https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en/index.dic",
   },
 ]
 ```
@@ -131,11 +131,6 @@ return {
         language = "en",
         aff = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff",
         dic = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic",
-      },
-      {
-        language = "en_code",
-        aff = "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.aff",
-        dic = "https://raw.githubusercontent.com/maxmilton/hunspell-dictionary/refs/heads/master/en_AU.dic",
       },
       {
         language = "sv",
