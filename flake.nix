@@ -1,8 +1,8 @@
 {
-  description = "Rustproof - a fast, extensible code checker.";
+  description = "Rustproof - a fast, extensible code-spell checker.";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
