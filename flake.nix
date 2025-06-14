@@ -25,7 +25,7 @@
 
         meta = with pkgs.lib; {
           description = ''
-            A fast, extensible code checker. Rustproof uses the Language Server Protocol (LSP)
+            A fast, extensible code-spell checker. Rustproof uses the Language Server Protocol (LSP)
             to communicate with your editor and detect spelling mistakes in your code. It handles
             a multitude of casings by breaking words into individual components.
           '';
