@@ -30,7 +30,7 @@
             a multitude of casings by breaking words into individual components.
           '';
           license = licenses.mit;
-          maintainers = [maintainers.redsuperbat];
+          maintainers = ["Max netterberg"];
         };
       };
 
