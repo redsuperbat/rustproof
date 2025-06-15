@@ -49,47 +49,13 @@ The concept is simple: split camelCase, PascalCase, and snake_case words before 
 
 Configuration options passed during LSP initialization.
 
----
+| Name                  | Type                     | Default                                   | Description                                                                                                                                                                          |
+| --------------------- | ------------------------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dict_path`           | `string`                 | `<system-config-path>/rustproof/dict.txt` | Specifies the path to a local dictionary file. Words added via LSP actions (like "add to dictionary") will be saved here.                                                            |
+| `diagnostic_severity` | `string`                 | `error`                                   | Sets the severity level reported for spelling diagnostics in the editor. Values: `"error"`, `"warning"`, `"info"`, `"hint"`.                                                         |
+| `dictionaries`        | `table` (list of tables) | _See default below_                       | A list of dictionaries to load for spellchecking. Each dictionary requires a `language`, `aff` (affix file URL), and `dic` (dictionary file URL). LSP will download/cache as needed. |
 
-### `dict_path`
-
-- **Type**: `string`
-- **Default**: `<system-config-path>/rustproof/dict.txt`
-- **Description**: Specifies the path to a local dictionary file. Words added via LSP actions (like "add to dictionary") will be saved here.
-- **Example**: `dict_path = "~/.config/nvim/lsp/rustproof-dict.txt"`
-
----
-
-### `diagnostic_severity`
-
-- **Type**: `string`
-- **Default**: `error`
-- **Description**: Sets the severity level reported for spelling diagnostics in the editor. Common values might include `"error"`, `"warning"`, `"info"`, or `"hint"`.
-- **Example**: `diagnostic_severity = "warning"`
-
----
-
-### `dictionaries`
-
-- **Type**: `table` (list of tables)
-- **Description**: A list of dictionaries to load for spellchecking. Each entry in the list is a table specifying the dictionary details. The LSP will automatically download and cache these dictionaries on first use if they are not present locally.
-- **Structure of each dictionary entry**:
-  - `language`
-    - **Type**: `string`
-    - **Required**: Yes
-    - **Description**: An identifier for the language (e.g., "en", "en_code", "sv"). Used internally and potentially for selecting dictionaries.
-    - **Example**: `"en"`
-  - `aff`
-    - **Type**: `string`
-    - **Required**: Yes
-    - **Description**: The URL to the Hunspell affix (`.aff`) file for this dictionary.
-    - **Example**: `"https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en/index.aff"`
-  - `dic`
-    - **Type**: `string`
-    - **Required**: Yes
-    - **Description**: The URL to the Hunspell dictionary (`.dic`) file for this dictionary.
-    - **Example**: `"https://raw.githubusercontent.com/redsuperbat/rustproof/refs/heads/main/dictionaries/en/index.dic"`
-- **Default**:
+**Default dictionaries**:
 
 ```lua
 [
@@ -127,11 +93,6 @@ return {
     -- List of dictionaries to include in your spellchecker.
     -- Rustproof will automatically download and cache the dictionaries when you first start the lsp
     dictionaries = {
-      {
-        language = "en",
-        aff = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.aff",
-        dic = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/en/index.dic",
-      },
       {
         language = "sv",
         aff = "https://raw.githubusercontent.com/wooorm/dictionaries/refs/heads/main/dictionaries/sv/index.aff",
