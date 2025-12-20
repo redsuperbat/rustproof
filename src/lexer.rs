@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Pos {
@@ -91,12 +90,12 @@ impl Into<Location> for Token {
 
 impl<I: Iterator<Item = char>> Lexer<I> {
     pub fn new(text: I) -> Self {
-        return Self {
+        Self {
             text,
             col: 0,
             line: 0,
             offset: 0,
-        };
+        }
     }
 
     fn pos(&self) -> Pos {
@@ -183,7 +182,10 @@ impl<I: Iterator<Item = char>> Lexer<I> {
             self.col = 0;
             self.line += 1;
         } else {
-            self.col += char.width().unwrap_or(0) as u32;
+            // Use UTF-16 code units for LSP compatibility
+            // BMP characters (U+0000 to U+FFFF) = 1 code unit
+            // Characters outside BMP (emoji, etc.) = 2 code units (surrogate pair)
+            self.col += char.len_utf16() as u32;
         }
 
         self.offset += 1;
@@ -238,5 +240,27 @@ mod tests {
         let str = "fn fizz_buzz(n: string){ return 'hello #{n}'}";
         let tokens = tokenize(str);
         assert_eq!(tokens, "fn fizz buzz n string return hello n");
+    }
+
+    #[test]
+    fn it_handles_tabs_as_single_utf16_unit() {
+        // Tab is 1 UTF-16 code unit, not visual width
+        let str = "\tHellooo";
+        let tokens = Lexer::new(str.chars()).collect::<Vec<_>>();
+        let token = tokens.get(0).unwrap();
+        assert_eq!(token.start.col, 1); // 1 tab = 1 UTF-16 code unit
+    }
+
+    #[test]
+    fn it_handles_surrogate_pairs() {
+        // Characters outside BMP use 2 UTF-16 code units (surrogate pair)
+        // 𐐀 (U+10400) is outside BMP
+        let str = "a𐐀b";
+        let tokens = Lexer::new(str.chars()).collect::<Vec<_>>();
+        // 'a' at col 0, '𐐀' at col 1 (2 code units), 'b' at col 3
+        let token = tokens.get(0).unwrap(); // "a"
+        assert_eq!(token.start.col, 0);
+        let token = tokens.get(1).unwrap(); // "b"
+        assert_eq!(token.start.col, 3); // 1 + 2 = 3
     }
 }
