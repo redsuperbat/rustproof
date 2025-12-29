@@ -38,6 +38,7 @@
         buildInputs = [
           pkgs.rustc
           pkgs.cargo
+          pkgs.rustfmt
           pkgs.llvmPackages.libclang
           pkgs.rust-analyzer
         ];

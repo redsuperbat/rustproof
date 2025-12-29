@@ -272,9 +272,8 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
-                        save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions {
-                            include_text: Some(true),
-                        })),
+                        change: Some(TextDocumentSyncKind::FULL),
+
                         ..Default::default()
                     },
                 )),
@@ -309,14 +308,14 @@ impl LanguageServer for Backend {
         self.sources.remove(&params.text_document.uri);
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        let Some(text) = params.text else {
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let Some(text) = params.content_changes.first().map(|c| &c.text) else {
             return;
         };
-        let source = Rope::from(text);
+        let source = Rope::from(text.to_owned());
         let uri = params.text_document.uri;
         self.sources.insert(uri.clone(), source);
-        self.spell_check_uri(uri).await;
+        self.spell_check_uri(uri).await
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
