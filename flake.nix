@@ -21,7 +21,7 @@
         src = ./.;
         cargoLock = {lockFile = ./Cargo.lock;};
 
-        nativeBuildInputs = [pkgs.llvmPackages.libclang];
+        nativeBuildInputs = [pkgs.rustPlatform.bindgenHook];
 
         meta = with pkgs.lib; {
           description = ''
@@ -42,7 +42,7 @@
           pkgs.llvmPackages.libclang
           pkgs.rust-analyzer
         ];
-        DYLD_LIBRARY_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+        LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
       };
     });
 }
