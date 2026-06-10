@@ -21,7 +21,12 @@
         src = ./.;
         cargoLock = {lockFile = ./Cargo.lock;};
 
-        nativeBuildInputs = [pkgs.rustPlatform.bindgenHook];
+        nativeBuildInputs = [
+          pkgs.rustPlatform.bindgenHook
+          pkgs.pkg-config
+        ];
+
+        buildInputs = [pkgs.openssl];
 
         meta = with pkgs.lib; {
           description = ''
@@ -35,12 +40,14 @@
       };
 
       devShells.default = pkgs.mkShell {
+        nativeBuildInputs = [pkgs.pkg-config];
         buildInputs = [
           pkgs.rustc
           pkgs.cargo
           pkgs.rustfmt
           pkgs.llvmPackages.libclang
           pkgs.rust-analyzer
+          pkgs.openssl
         ];
         LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
       };
